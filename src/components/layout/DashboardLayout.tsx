@@ -3,7 +3,6 @@ import { Icons } from "../icons/Icons";
 import { useAuthStore } from "../../store/authStore";
 import { notify } from "../../utils/notify";
 import VerificationBanner from "./VerificationBanner";
-import ThemeToggle from "../ThemeToggle";
 import NotificationCenter from "../NotificationCenter";
 
 export default function DashboardLayout() {
@@ -93,7 +92,7 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <ThemeToggle />
+            
             <div
               className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border ${
                 isAdvertiser

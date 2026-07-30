@@ -966,7 +966,9 @@ export const cocobaseTasks = {
       advertiserEmail?: string;
       advertiserDisplayName?: string;
     },
-  ) {
+  )
+  
+  {
     const taskPayload = {
       ...payload,
       advertiser: payload.advertiser ?? payload.advertiserId ?? "",
@@ -990,4 +992,16 @@ export const cocobaseTasks = {
     const document = await cocobaseClient.createDocument("tasks", taskPayload);
     return normalizeTask(document);
   },
+
+  async update(taskId: string, updates: Partial<Record<string, unknown>>) {
+  if (!cocobaseClient) {
+    throw new Error("Cocobase is not configured");
+  }
+  const document = await cocobaseClient.updateDocument(
+    "tasks",
+    taskId,
+    updates,
+  );
+  return normalizeTask(document);
+},
 };

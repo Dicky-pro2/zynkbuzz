@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { useAuthStore } from "./authStore";
 import { useGamificationStore } from "./gamificationStore";
+import { cocobaseTasks } from "../services/cocobase";
 
 interface UserAppData {
   tasks: Task[];
@@ -240,16 +241,19 @@ export const useAppStore = create<AppState>((set, get) => {
       const state = get();
       let updatedTask: Task | undefined;
       const task = state.tasks.find((t) => t.id === taskId);
+      const authUser = useAuthStore.getState().user;
 
       const newTaskSubmission: TaskSubmission = {
         id: crypto.randomUUID(),
-        earnerName: "Current Earner",
-        earnerId: "earner_current",
+        earnerName: authUser?.name ?? "Current Earner",
+        earnerId: authUser?.id ?? "earner_current",
         proof,
-        status: "approved",
+        status: "pending",
         createdAt: new Date().toISOString(),
       };
 
+      // Reserve the slot immediately so it can't be double-claimed while
+      // pending review; refunded automatically if the advertiser rejects it.
       const update = (list: Task[]) =>
         list.map((t) => {
           if (t.id !== taskId) return t;
@@ -257,7 +261,6 @@ export const useAppStore = create<AppState>((set, get) => {
           updatedTask = {
             ...t,
             slotsLeft,
-            completionCount: t.completionCount + 1,
             status: slotsLeft <= 0 ? "completed" : t.status,
             completedByCurrentUser: true,
             taskSubmissions: [...(t.taskSubmissions ?? []), newTaskSubmission],
@@ -266,7 +269,7 @@ export const useAppStore = create<AppState>((set, get) => {
         });
 
       const newSubmission: Submission = {
-        id: crypto.randomUUID(),
+        id: newTaskSubmission.id,
         taskId,
         taskTitle: task
           ? `${task.taskType} on ${task.platform}`
@@ -275,7 +278,7 @@ export const useAppStore = create<AppState>((set, get) => {
         taskType: task?.taskType ?? "",
         reward: task?.reward ?? 0,
         proof,
-        status: "approved",
+        status: "pending",
         createdAt: new Date().toISOString(),
       };
 
@@ -285,34 +288,16 @@ export const useAppStore = create<AppState>((set, get) => {
         submissions: [newSubmission, ...state.submissions],
       });
 
-      // Credit the earner's wallet, applying any active streak bonus.
-      if (task?.reward) {
-        const authState = useAuthStore.getState();
-        if (authState.user) {
-          const newStreak = authState.recordDailyActivity();
-          const bonusPercent =
-            useGamificationStore.getState().getStreakBonus(newStreak);
-          const bonusAmount =
-            Math.round(task.reward * (bonusPercent / 100) * 100) / 100;
-
-          authState.updateWallet(
-            authState.user.walletBalance + task.reward + bonusAmount,
-          );
-
-          get().addTransaction({
-            type: "task_earning",
-            amount: task.reward,
-            description: `Reward for "${task.title}"`,
+      // Sync the slot reservation to Cocobase so other earners see it too.
+      if (updatedTask) {
+        void cocobaseTasks
+          .update(taskId, {
+            slotsLeft: updatedTask.slotsLeft,
+            status: updatedTask.status,
+          })
+          .catch((error) => {
+            console.warn("Failed to sync task slot reservation", error);
           });
-
-          if (bonusAmount > 0) {
-            get().addTransaction({
-              type: "bonus",
-              amount: bonusAmount,
-              description: `${bonusPercent}% streak bonus (Day ${newStreak})`,
-            });
-          }
-        }
       }
 
       return updatedTask;
@@ -382,6 +367,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
     reviewTaskSubmission: (taskId, submissionId, action, note) => {
       const state = get();
+      const task = state.tasks.find((t) => t.id === taskId);
+      const submissionEntry = task?.taskSubmissions?.find(
+        (s) => s.id === submissionId,
+      );
 
       const update = (list: Task[]) =>
         list.map((t) => {
@@ -403,16 +392,71 @@ export const useAppStore = create<AppState>((set, get) => {
             taskSubmissions: updatedSubmissions,
             slotsLeft,
             completionCount:
-              action === "reject"
-                ? Math.max(0, t.completionCount - 1)
-                : t.completionCount,
+              action === "approve" ? t.completionCount + 1 : t.completionCount,
           };
         });
 
+      const updatedTasks = update(state.tasks);
+      const updatedMyTasks = update(state.myTasks);
+      const updatedTask = updatedTasks.find((t) => t.id === taskId);
+
       persistCurrent({
-        tasks: update(state.tasks),
-        myTasks: update(state.myTasks),
+        tasks: updatedTasks,
+        myTasks: updatedMyTasks,
+        submissions: state.submissions.map((s) =>
+          s.id === submissionId
+            ? { ...s, status: action === "approve" ? "approved" : "rejected" }
+            : s,
+        ),
       });
+
+      if (updatedTask) {
+        void cocobaseTasks
+          .update(taskId, {
+            slotsLeft: updatedTask.slotsLeft,
+            completionCount: updatedTask.completionCount,
+          })
+          .catch((error) => {
+            console.warn("Failed to sync task review counts", error);
+          });
+      }
+
+      // ⚠️ Production limitation: this only correctly credits the earner
+      // when the earner and the reviewing advertiser share the same browser
+      // session (e.g. demo/testing). Crediting a *different* logged-in
+      // user's wallet from here is NOT safe to do client-side — it requires
+      // a server-authoritative step (a serverless function holding a
+      // privileged Cocobase key), the same pattern already used for the
+      // Google OAuth bridge.
+      if (action === "approve" && submissionEntry && task?.reward) {
+        const authState = useAuthStore.getState();
+        if (authState.user && authState.user.id === submissionEntry.earnerId) {
+          const newStreak = authState.recordDailyActivity();
+          const bonusPercent = useGamificationStore
+            .getState()
+            .getStreakBonus(newStreak);
+          const bonusAmount =
+            Math.round(task.reward * (bonusPercent / 100) * 100) / 100;
+
+          authState.updateWallet(
+            authState.user.walletBalance + task.reward + bonusAmount,
+          );
+
+          get().addTransaction({
+            type: "task_earning",
+            amount: task.reward,
+            description: `Approved: ${task.taskType} on ${task.platform}`,
+          });
+
+          if (bonusAmount > 0) {
+            get().addTransaction({
+              type: "bonus",
+              amount: bonusAmount,
+              description: `${bonusPercent}% streak bonus (Day ${newStreak})`,
+            });
+          }
+        }
+      }
     },
   };
 });

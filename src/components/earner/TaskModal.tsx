@@ -13,8 +13,8 @@ interface TaskModalProps {
 }
 
 export default function TaskModal({ task, onClose }: TaskModalProps) {
-  const { user, updateWallet } = useAuthStore();
-  const { completeTask, addTransaction, pushActivity, addNotification } =
+  const { user } = useAuthStore();
+  const { completeTask, pushActivity, addNotification } =
     useAppStore();
   const [proof, setProof] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -41,23 +41,19 @@ export default function TaskModal({ task, onClose }: TaskModalProps) {
       });
 
       completeTask(task.id, proof);
-      updateWallet(user.walletBalance + task.reward);
-      addTransaction({
-        type: "task_earning",
-        amount: task.reward,
-        description: `Earned from: ${task.taskType} on ${task.platform}`,
-      });
       pushActivity(
-        `Task completed: ${task.taskType} on ${task.platform} · 🪙${task.reward} paid out`,
-        "green",
+        `Submitted for review: ${task.taskType} on ${task.platform}`,
+        "violet",
       );
       addNotification({
-        type: "task_approved",
-        title: "💰 Task Approved!",
-        message: `You earned 🪙${task.reward} for "${task.taskType} on ${task.platform}"`,
+        type: "task_completed",
+        title: "Submission Received",
+        message: `Your proof for "${task.taskType} on ${task.platform}" is pending advertiser review.`,
       });
 
-      notify.coinsEarned(task.reward, `${task.taskType} on ${task.platform}`);
+      notify.success(
+        "Submitted! You'll be paid once the advertiser approves it.",
+      );
       setProof("");
       onClose();
     } catch (error) {

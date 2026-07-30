@@ -5,6 +5,7 @@ import AdvertiserTaskCard from './AdvertiserTaskCard';
 import { Icons } from '../icons/Icons';
 import { notify } from '../../utils/notify';
 import type { Task } from '../../types';
+import { cocobaseTasks } from '../../services/cocobase';
 
 type FilterType = 'all' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -80,6 +81,10 @@ export default function AdvertiserTasks() {
     }
 
     updateTaskStatus(taskId, status);
+
+    void cocobaseTasks.update(taskId, { status }).catch((error) => {
+      console.warn("Failed to sync task status to Cocobase", error);
+    });
   };
 
   return (
