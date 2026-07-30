@@ -80,6 +80,7 @@ const TX_META: Record<
   task_earning: { icon: <Icons.Star size={15} />, color: "text-emerald2" },
   refund: { icon: <Icons.ArrowLeft size={15} />, color: "text-violet-light" },
   bonus: { icon: <Icons.PiggyBank size={15} />, color: "text-amber-400" },
+  earning: { icon: <Icons.Coins size={15} />, color: "text-emerald2" },
 };
 
 const STATUS_DISPLAY: Record<string, { icon: React.ReactNode; color: string }> =

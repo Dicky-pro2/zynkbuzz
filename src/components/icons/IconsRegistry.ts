@@ -65,6 +65,7 @@ export const Icons = {
   Banknote: LucideIcons.Banknote,
   CreditCard: LucideIcons.CreditCard,
   PiggyBank: LucideIcons.PiggyBank,
+  Coins: LucideIcons.Coins,
 
   // Misc
   Globe: LucideIcons.Globe,

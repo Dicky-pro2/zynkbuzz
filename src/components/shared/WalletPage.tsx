@@ -62,6 +62,11 @@ const TX_META: Record<
     color: "text-amber-400",
     label: "Bonus",
   },
+  earning: {
+    icon: <Icons.Coins size={16} />,
+    color: "text-emerald2",
+    label: "Earning",
+  },
 };
 
 export default function WalletPage() {
