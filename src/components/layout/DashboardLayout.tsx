@@ -116,7 +116,7 @@ export default function DashboardLayout() {
             </div>
 
             <div className="bg-card border border-border rounded-full px-3 sm:px-4 py-1.5 text-sm font-semibold flex items-center gap-1.5">
-              <span className="text-amber-400">🪙</span>
+              <span className="text-amber-400"><Icons.Coins /></span>
               <span>{(user?.walletBalance ?? 0).toLocaleString()}</span>
             </div>
 

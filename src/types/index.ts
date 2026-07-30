@@ -3,8 +3,13 @@ export type Role = "advertiser" | "earner" | "admin";
 export interface User {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   nickname?: string | null;
   email: string;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: string;
   role: Role;
   avatar: string | null;
   walletBalance: number;
@@ -13,16 +18,15 @@ export interface User {
   tasksCompleted: number;
   tasksPosted: number;
   isEmailVerified: boolean;
-  // New features
-  taskQualityScore: number; // 0-100, affects task visibility for earners
-  currentStreak: number; // days
-  longestStreak: number; // days
+  taskQualityScore: number;
+  currentStreak: number;
+  longestStreak: number;
   lastTaskCompletionDate?: string;
   referralCode?: string;
   referralsCount: number;
   referralEarnings: number;
-  referralLevel: number; // 1-5
-  theme: "light" | "dark"; // user theme preference
+  referralLevel: number;
+  theme: "light" | "dark";
 }
 
 export interface ActivityItem {

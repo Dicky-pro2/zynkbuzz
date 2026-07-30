@@ -11,8 +11,13 @@ const LOCAL_AUTH_USERS_STORAGE_KEY = "zynk-local-auth-users";
 type LocalAuthUser = {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   nickname: string | null;
   email: string;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: string;
   password: string;
   role: Role;
   avatar: string | null;
@@ -69,69 +74,92 @@ function ensureDemoAuthUsers(): LocalAuthUser[] {
   if (existing.length > 0) return existing;
 
   const demoUsers: LocalAuthUser[] = [
-    {
-      id: "demo-advertiser",
-      name: "Demo Advertiser",
-      nickname: "demoadv",
-      email: "adv@test.com",
-      password: "Password123!",
-      role: "advertiser",
-      avatar: null,
-      walletBalance: 2500,
-      totalEarned: 0,
-      totalSpent: 0,
-      tasksCompleted: 0,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-    {
-      id: "demo-earner",
-      name: "Demo Earner",
-      nickname: "demoearn",
-      email: "earner@test.com",
-      password: "Password123!",
-      role: "earner",
-      avatar: null,
-      walletBalance: 340,
-      totalEarned: 1200,
-      totalSpent: 0,
-      tasksCompleted: 3,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-    {
-      id: "demo-admin",
-      name: "Demo Admin",
-      nickname: "demoadmin",
-      email: "admin@test.com",
-      password: "Password123!",
-      role: "admin",
-      avatar: null,
-      walletBalance: 0,
-      totalEarned: 0,
-      totalSpent: 0,
-      tasksCompleted: 0,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-  ];
+  {
+    id: "demo-advertiser",
+    name: "Demo Advertiser",
+    firstName: "Demo",
+    lastName: "Advertiser",
+    nickname: "demoadv",
+    email: "adv@test.com",
+    phoneNumber: "+10000000000",
+    dateOfBirth: "1990-01-01",
+    gender: "prefer_not_to_say",
+    password: "Password123!",
+    role: "advertiser",
+    avatar: null,
+    walletBalance: 2500,
+    totalEarned: 0,
+    totalSpent: 0,
+    tasksCompleted: 0,
+    tasksPosted: 0,
+    isEmailVerified: true,
+  },
+  {
+    id: "demo-earner",
+    name: "Demo Earner",
+    firstName: "Demo",
+    lastName: "Earner",
+    nickname: "demoearn",
+    email: "earner@test.com",
+    phoneNumber: "+10000000001",
+    dateOfBirth: "1990-01-01",
+    gender: "prefer_not_to_say",
+    password: "Password123!",
+    role: "earner",
+    avatar: null,
+    walletBalance: 340,
+    totalEarned: 1200,
+    totalSpent: 0,
+    tasksCompleted: 3,
+    tasksPosted: 0,
+    isEmailVerified: true,
+  },
+  {
+    id: "demo-admin",
+    name: "Demo Admin",
+    firstName: "Demo",
+    lastName: "Admin",
+    nickname: "demoadmin",
+    email: "admin@test.com",
+    phoneNumber: "+10000000002",
+    dateOfBirth: "1990-01-01",
+    gender: "prefer_not_to_say",
+    password: "Password123!",
+    role: "admin",
+    avatar: null,
+    walletBalance: 0,
+    totalEarned: 0,
+    totalSpent: 0,
+    tasksCompleted: 0,
+    tasksPosted: 0,
+    isEmailVerified: true,
+  },
+];
 
   writeLocalAuthUsers(demoUsers);
   return demoUsers;
 }
 
 function buildLocalAuthUser(payload: {
-  name: string;
-  nickname?: string;
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
   role: Role;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: string;
 }): LocalAuthUser {
   return {
     id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: payload.name.trim() || "User",
-    nickname: payload.nickname?.trim() || null,
+    name: `${payload.firstName} ${payload.lastName}`.trim() || "User",
+    firstName: payload.firstName.trim(),
+    lastName: payload.lastName.trim(),
+    nickname: null,
     email: payload.email.trim().toLowerCase(),
+    phoneNumber: payload.phoneNumber,
+    dateOfBirth: payload.dateOfBirth,
+    gender: payload.gender,
     password: payload.password,
     role: payload.role,
     avatar: null,
@@ -140,7 +168,7 @@ function buildLocalAuthUser(payload: {
     totalSpent: 0,
     tasksCompleted: 0,
     tasksPosted: 0,
-    isEmailVerified: true,
+    isEmailVerified: false, // was true before — see note below
   };
 }
 
@@ -148,8 +176,13 @@ function createLocalAuthResult(user: LocalAuthUser) {
   const normalizedUser: User = {
     id: user.id,
     name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
     nickname: user.nickname,
     email: user.email,
+    phoneNumber: user.phoneNumber,
+    dateOfBirth: user.dateOfBirth,
+    gender: user.gender,
     role: user.role,
     avatar: user.avatar,
     walletBalance: user.walletBalance,
@@ -188,11 +221,14 @@ function loginLocalAuthUser(email: string, password: string) {
 }
 
 function registerLocalAuthUser(payload: {
-  name: string;
-  nickname?: string;
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
   role: Role;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: string;
 }) {
   const normalizedEmail = payload.email.trim().toLowerCase();
   const users = ensureDemoAuthUsers();
@@ -282,13 +318,19 @@ export function normalizeUser(
     fallbackRole,
   );
 
+  const firstName = asString(data.firstName) ?? "";
+  const lastName = asString(data.lastName) ?? "";
+  const derivedName =
+    [firstName, lastName].filter(Boolean).join(" ").trim() ||
+    asString(data.name) ||
+    appUser.email?.split("@")[0] ||
+    "User";
+
   return {
     id: appUser.id,
-    name:
-      asString(data.name) ??
-      asString(data.fullName) ??
-      appUser.email?.split("@")[0] ??
-      "User",
+    name: derivedName,
+    firstName,
+    lastName,
     nickname:
       pickFirstDefined(
         asString(data.nickname),
@@ -296,6 +338,9 @@ export function normalizeUser(
         asString(data.username),
       ) ?? null,
     email: appUser.email,
+    phoneNumber: asString(data.phoneNumber) ?? "",
+    dateOfBirth: asString(data.dateOfBirth) ?? "",
+    gender: asString(data.gender) ?? "",
     role,
     avatar: asString(data.avatar) ?? null,
     walletBalance: asNumber(data.walletBalance),
@@ -303,7 +348,7 @@ export function normalizeUser(
     totalSpent: asNumber(data.totalSpent),
     tasksCompleted: asNumber(data.tasksCompleted),
     tasksPosted: asNumber(data.tasksPosted),
-    isEmailVerified: asBoolean(data.isEmailVerified, true),
+    isEmailVerified: asBoolean(data.isEmailVerified, false),
     taskQualityScore: asNumber(data.taskQualityScore) || 100,
     currentStreak: asNumber(data.currentStreak) || 0,
     longestStreak: asNumber(data.longestStreak) || 0,
@@ -603,29 +648,33 @@ async function requestCocobase(
 }
 
 export const cocobaseAuth = {
-  async googleLogin(idToken: string, fallbackRole: Role = "earner") {
-    try {
-      const response = await authAPI.googleAuth(idToken, fallbackRole);
-      const { user, token, refreshToken } = normalizeAuthResult(
-        response.data,
-        fallbackRole,
-      );
-      if (!user) throw new Error("Unable to sign in");
-      return {
-        user,
-        token: token ?? "backend_token",
-        refreshToken: refreshToken ?? "backend_refresh",
-      };
-    } catch (error) {
-      const localResult = registerLocalAuthUser({
-        name: "Google User",
-        email: `google-${Date.now()}@local.dev`,
-        password: `google-${Date.now()}`,
-        role: fallbackRole,
-      });
-      return localResult;
-    }
-  },
+ async googleLogin(idToken: string, fallbackRole: Role = "earner") {
+  try {
+    const response = await authAPI.googleAuth(idToken, fallbackRole);
+    const { user, token, refreshToken } = normalizeAuthResult(
+      response.data,
+      fallbackRole,
+    );
+    if (!user) throw new Error("Unable to sign in");
+    return {
+      user,
+      token: token ?? "backend_token",
+      refreshToken: refreshToken ?? "backend_refresh",
+    };
+  } catch (error) {
+    const localResult = registerLocalAuthUser({
+      firstName: "Google",
+      lastName: "User",
+      email: `google-${Date.now()}@local.dev`,
+      password: `google-${Date.now()}`,
+      role: fallbackRole,
+      phoneNumber: "",
+      dateOfBirth: "",
+      gender: "",
+    });
+    return localResult;
+  }
+},
 
   async login(email: string, password: string) {
     try {
@@ -648,37 +697,57 @@ export const cocobaseAuth = {
   },
 
   async register(payload: {
-    name: string;
-    nickname?: string;
-    email: string;
-    password: string;
-    role: Role;
-  }) {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: string;
+  password: string;
+  role: Role;
+}) {
+  const fullName = `${payload.firstName} ${payload.lastName}`.trim();
+
+  if (cocobaseClient) {
     try {
-      const response = await authAPI.register({
-        name: payload.name,
-        nickname: payload.nickname,
-        email: payload.email,
-        password: payload.password,
-        role: payload.role,
-      });
-      const { user, token, refreshToken } = normalizeAuthResult(
-        response.data,
-        payload.role,
-        payload.name,
-        payload.nickname,
+      const result = await cocobaseClient.auth.register(
+        payload.email,
+        payload.password,
+        {
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          name: fullName,
+          phoneNumber: payload.phoneNumber,
+          dateOfBirth: payload.dateOfBirth,
+          gender: payload.gender,
+          role: payload.role,
+        },
       );
+
+      // The SDK's register() shape isn't fully confirmed from docs alone —
+      // handle both a wrapped { user } response and a bare AppUser.
+      const rawUser =
+        (result as { user?: AppUser })?.user ?? (result as AppUser);
+      const user = normalizeUser(rawUser, payload.role);
+
       if (!user) throw new Error("Unable to create account");
+
       return {
         user,
-        token: token ?? "backend_token",
-        refreshToken: refreshToken ?? "backend_refresh",
+        token: cocobaseClient.auth.getToken() ?? "cocobase_token",
+        refreshToken: "cocobase_refresh",
       };
     } catch (error) {
-      const localResult = registerLocalAuthUser(payload);
-      return localResult;
+      console.warn(
+        "Cocobase auth.register failed; using local fallback",
+        error,
+      );
     }
-  },
+  }
+
+  // Local fallback — offline/demo mode only.
+  return registerLocalAuthUser(payload);
+},
 
   async getCurrentUser() {
     if (!cocobaseClient) return null;
