@@ -74,67 +74,67 @@ function ensureDemoAuthUsers(): LocalAuthUser[] {
   if (existing.length > 0) return existing;
 
   const demoUsers: LocalAuthUser[] = [
-  {
-    id: "demo-advertiser",
-    name: "Demo Advertiser",
-    firstName: "Demo",
-    lastName: "Advertiser",
-    nickname: "demoadv",
-    email: "adv@test.com",
-    phoneNumber: "+10000000000",
-    dateOfBirth: "1990-01-01",
-    gender: "prefer_not_to_say",
-    password: "Password123!",
-    role: "advertiser",
-    avatar: null,
-    walletBalance: 2500,
-    totalEarned: 0,
-    totalSpent: 0,
-    tasksCompleted: 0,
-    tasksPosted: 0,
-    isEmailVerified: true,
-  },
-  {
-    id: "demo-earner",
-    name: "Demo Earner",
-    firstName: "Demo",
-    lastName: "Earner",
-    nickname: "demoearn",
-    email: "earner@test.com",
-    phoneNumber: "+10000000001",
-    dateOfBirth: "1990-01-01",
-    gender: "prefer_not_to_say",
-    password: "Password123!",
-    role: "earner",
-    avatar: null,
-    walletBalance: 340,
-    totalEarned: 1200,
-    totalSpent: 0,
-    tasksCompleted: 3,
-    tasksPosted: 0,
-    isEmailVerified: true,
-  },
-  {
-    id: "demo-admin",
-    name: "Demo Admin",
-    firstName: "Demo",
-    lastName: "Admin",
-    nickname: "demoadmin",
-    email: "admin@test.com",
-    phoneNumber: "+10000000002",
-    dateOfBirth: "1990-01-01",
-    gender: "prefer_not_to_say",
-    password: "Password123!",
-    role: "admin",
-    avatar: null,
-    walletBalance: 0,
-    totalEarned: 0,
-    totalSpent: 0,
-    tasksCompleted: 0,
-    tasksPosted: 0,
-    isEmailVerified: true,
-  },
-];
+    {
+      id: "demo-advertiser",
+      name: "Demo Advertiser",
+      firstName: "Demo",
+      lastName: "Advertiser",
+      nickname: "demoadv",
+      email: "adv@test.com",
+      phoneNumber: "+10000000000",
+      dateOfBirth: "1990-01-01",
+      gender: "prefer_not_to_say",
+      password: "Password123!",
+      role: "advertiser",
+      avatar: null,
+      walletBalance: 2500,
+      totalEarned: 0,
+      totalSpent: 0,
+      tasksCompleted: 0,
+      tasksPosted: 0,
+      isEmailVerified: true,
+    },
+    {
+      id: "demo-earner",
+      name: "Demo Earner",
+      firstName: "Demo",
+      lastName: "Earner",
+      nickname: "demoearn",
+      email: "earner@test.com",
+      phoneNumber: "+10000000001",
+      dateOfBirth: "1990-01-01",
+      gender: "prefer_not_to_say",
+      password: "Password123!",
+      role: "earner",
+      avatar: null,
+      walletBalance: 340,
+      totalEarned: 1200,
+      totalSpent: 0,
+      tasksCompleted: 3,
+      tasksPosted: 0,
+      isEmailVerified: true,
+    },
+    {
+      id: "demo-admin",
+      name: "Demo Admin",
+      firstName: "Demo",
+      lastName: "Admin",
+      nickname: "demoadmin",
+      email: "admin@test.com",
+      phoneNumber: "+10000000002",
+      dateOfBirth: "1990-01-01",
+      gender: "prefer_not_to_say",
+      password: "Password123!",
+      role: "admin",
+      avatar: null,
+      walletBalance: 0,
+      totalEarned: 0,
+      totalSpent: 0,
+      tasksCompleted: 0,
+      tasksPosted: 0,
+      isEmailVerified: true,
+    },
+  ];
 
   writeLocalAuthUsers(demoUsers);
   return demoUsers;
@@ -466,6 +466,8 @@ function normalizeBackendUser(
         fallbackName,
       ) ??
       "User",
+    firstName: asString(firstName) ?? "",
+    lastName: asString(lastName) ?? "",
     nickname:
       pickFirstDefined(
         asString(mergedData.nickname),
@@ -484,6 +486,9 @@ function normalizeBackendUser(
         asString(mergedData.avatar),
         asString(mergedData.profilePicture),
       ) ?? null,
+    phoneNumber: asString(mergedData.phoneNumber) ?? "",
+    dateOfBirth: asString(mergedData.dateOfBirth) ?? "",
+    gender: asString(mergedData.gender) ?? "",
     walletBalance: asNumber(
       pickFirstDefined(mergedData.walletBalance, mergedData.balance),
     ),
@@ -648,33 +653,33 @@ async function requestCocobase(
 }
 
 export const cocobaseAuth = {
- async googleLogin(idToken: string, fallbackRole: Role = "earner") {
-  try {
-    const response = await authAPI.googleAuth(idToken, fallbackRole);
-    const { user, token, refreshToken } = normalizeAuthResult(
-      response.data,
-      fallbackRole,
-    );
-    if (!user) throw new Error("Unable to sign in");
-    return {
-      user,
-      token: token ?? "backend_token",
-      refreshToken: refreshToken ?? "backend_refresh",
-    };
-  } catch (error) {
-    const localResult = registerLocalAuthUser({
-      firstName: "Google",
-      lastName: "User",
-      email: `google-${Date.now()}@local.dev`,
-      password: `google-${Date.now()}`,
-      role: fallbackRole,
-      phoneNumber: "",
-      dateOfBirth: "",
-      gender: "",
-    });
-    return localResult;
-  }
-},
+  async googleLogin(idToken: string, fallbackRole: Role = "earner") {
+    try {
+      const response = await authAPI.googleAuth(idToken, fallbackRole);
+      const { user, token, refreshToken } = normalizeAuthResult(
+        response.data,
+        fallbackRole,
+      );
+      if (!user) throw new Error("Unable to sign in");
+      return {
+        user,
+        token: token ?? "backend_token",
+        refreshToken: refreshToken ?? "backend_refresh",
+      };
+    } catch (error) {
+      const localResult = registerLocalAuthUser({
+        firstName: "Google",
+        lastName: "User",
+        email: `google-${Date.now()}@local.dev`,
+        password: `google-${Date.now()}`,
+        role: fallbackRole,
+        phoneNumber: "",
+        dateOfBirth: "",
+        gender: "",
+      });
+      return localResult;
+    }
+  },
 
   async login(email: string, password: string) {
     try {
@@ -697,57 +702,58 @@ export const cocobaseAuth = {
   },
 
   async register(payload: {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  dateOfBirth: string;
-  gender: string;
-  password: string;
-  role: Role;
-}) {
-  const fullName = `${payload.firstName} ${payload.lastName}`.trim();
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber: string;
+    dateOfBirth: string;
+    gender: string;
+    password: string;
+    role: Role;
+  }) {
+    const fullName = `${payload.firstName} ${payload.lastName}`.trim();
 
-  if (cocobaseClient) {
-    try {
-      const result = await cocobaseClient.auth.register(
-        payload.email,
-        payload.password,
-        {
-          firstName: payload.firstName,
-          lastName: payload.lastName,
-          name: fullName,
-          phoneNumber: payload.phoneNumber,
-          dateOfBirth: payload.dateOfBirth,
-          gender: payload.gender,
-          role: payload.role,
-        },
-      );
+    if (cocobaseClient) {
+      try {
+        const result = await cocobaseClient.auth.register({
+          email: payload.email,
+          password: payload.password,
+          data: {
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            name: fullName,
+            phoneNumber: payload.phoneNumber,
+            dateOfBirth: payload.dateOfBirth,
+            gender: payload.gender,
+            role: payload.role,
+          },
+        });
 
-      // The SDK's register() shape isn't fully confirmed from docs alone —
-      // handle both a wrapped { user } response and a bare AppUser.
-      const rawUser =
-        (result as { user?: AppUser })?.user ?? (result as AppUser);
-      const user = normalizeUser(rawUser, payload.role);
+        // The SDK's register() shape isn't fully confirmed from docs alone —
+        // handle both a wrapped { user } response and a bare AppUser.
+        const rawUser =
+          (result as unknown as { user?: AppUser })?.user ??
+          (result as unknown as AppUser);
+        const user = normalizeUser(rawUser, payload.role);
 
-      if (!user) throw new Error("Unable to create account");
+        if (!user) throw new Error("Unable to create account");
 
-      return {
-        user,
-        token: cocobaseClient.auth.getToken() ?? "cocobase_token",
-        refreshToken: "cocobase_refresh",
-      };
-    } catch (error) {
-      console.warn(
-        "Cocobase auth.register failed; using local fallback",
-        error,
-      );
+        return {
+          user,
+          token: cocobaseClient.auth.getToken() ?? "cocobase_token",
+          refreshToken: "cocobase_refresh",
+        };
+      } catch (error) {
+        console.warn(
+          "Cocobase auth.register failed; using local fallback",
+          error,
+        );
+      }
     }
-  }
 
-  // Local fallback — offline/demo mode only.
-  return registerLocalAuthUser(payload);
-},
+    // Local fallback — offline/demo mode only.
+    return registerLocalAuthUser(payload);
+  },
 
   async getCurrentUser() {
     if (!cocobaseClient) return null;
@@ -782,7 +788,7 @@ export const cocobaseAuth = {
     return true;
   },
 
- async forgotPassword(email: string) {
+  async forgotPassword(email: string) {
     try {
       await authAPI.forgotPassword(email);
       return true;
@@ -1035,9 +1041,7 @@ export const cocobaseTasks = {
       advertiserEmail?: string;
       advertiserDisplayName?: string;
     },
-  )
-  
-  {
+  ) {
     const taskPayload = {
       ...payload,
       advertiser: payload.advertiser ?? payload.advertiserId ?? "",
@@ -1063,14 +1067,14 @@ export const cocobaseTasks = {
   },
 
   async update(taskId: string, updates: Partial<Record<string, unknown>>) {
-  if (!cocobaseClient) {
-    throw new Error("Cocobase is not configured");
-  }
-  const document = await cocobaseClient.updateDocument(
-    "tasks",
-    taskId,
-    updates,
-  );
-  return normalizeTask(document);
-},
+    if (!cocobaseClient) {
+      throw new Error("Cocobase is not configured");
+    }
+    const document = await cocobaseClient.updateDocument(
+      "tasks",
+      taskId,
+      updates,
+    );
+    return normalizeTask(document);
+  },
 };
