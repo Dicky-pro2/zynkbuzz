@@ -682,23 +682,28 @@ export const cocobaseAuth = {
   },
 
   async login(email: string, password: string) {
-    try {
-      const response = await authAPI.login({ email, password });
-      const { user, token, refreshToken } = normalizeAuthResult(
-        response.data,
-        "earner",
-      );
-      if (!user) throw new Error("Unable to sign in");
-      return {
-        user,
-        token: token ?? "backend_token",
-        refreshToken: refreshToken ?? "backend_refresh",
-      };
-    } catch (error) {
-      const localResult = loginLocalAuthUser(email, password);
-      if (localResult) return localResult;
-      throw normalizeAuthError(error);
+    if (!env.IS_MOCK) {
+      try {
+        const response = await authAPI.login({ email, password });
+        const { user, token, refreshToken } = normalizeAuthResult(
+          response.data,
+          "earner",
+        );
+        if (user) {
+          return {
+            user,
+            token: token ?? "backend_token",
+            refreshToken: refreshToken ?? "backend_refresh",
+          };
+        }
+      } catch (error) {
+        console.warn("Backend login failed; falling back to local", error);
+      }
     }
+
+    const localResult = loginLocalAuthUser(email, password);
+    if (localResult) return localResult;
+    throw new Error("Incorrect email or password.");
   },
 
   async register(payload: {
