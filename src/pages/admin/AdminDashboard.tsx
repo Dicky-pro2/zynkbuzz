@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { useAppStore } from "../../store/appStore";
+import { cocobaseAdmin, cocobaseWallet } from "../../services/cocobase";
+import type { Transaction, Withdrawal } from "../../types";
 import {
   calculateAdvertiserImpact,
   calculateWithdrawalFee,
@@ -9,21 +11,68 @@ import {
 export default function AdminDashboard() {
   const { user } = useAuthStore();
   const { transactions, withdrawals } = useAppStore();
+  const [cocobaseTransactions, setCocobaseTransactions] = useState<
+    Transaction[]
+  >([]);
+  const [cocobaseWithdrawals, setCocobaseWithdrawals] = useState<Withdrawal[]>(
+    [],
+  );
+  const [users, setUsers] = useState<
+    Array<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      createdAt: string;
+      isEmailVerified: boolean;
+      avatar: string | null;
+      walletBalance: number;
+    }>
+  >([]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      const [remoteTransactions, remoteWithdrawals, remoteUsers] =
+        await Promise.all([
+          cocobaseWallet.listTransactions(),
+          cocobaseAdmin.listWithdrawals(),
+          cocobaseAdmin.listUsers(),
+        ]);
+
+      if (!active) return;
+      setCocobaseTransactions(remoteTransactions);
+      setCocobaseWithdrawals(remoteWithdrawals);
+      setUsers(remoteUsers);
+    };
+
+    void loadData();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const effectiveTransactions =
+    cocobaseTransactions.length > 0 ? cocobaseTransactions : transactions;
+  const effectiveWithdrawals =
+    cocobaseWithdrawals.length > 0 ? cocobaseWithdrawals : withdrawals;
 
   const summary = useMemo(() => {
-    const totalWithdrawals = withdrawals.reduce(
+    const totalWithdrawals = effectiveWithdrawals.reduce(
       (sum, item) => sum + item.amount,
       0,
     );
-    const totalFees = withdrawals.reduce(
+    const totalFees = effectiveWithdrawals.reduce(
       (sum, item) => sum + calculateWithdrawalFee(item.amount),
       0,
     );
-    const totalTransactions = transactions.reduce(
+    const totalTransactions = effectiveTransactions.reduce(
       (sum, tx) => sum + Math.abs(tx.amount),
       0,
     );
-    const advertiserBudget = transactions
+    const advertiserBudget = effectiveTransactions
       .filter((tx) => tx.type === "task_payment")
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
@@ -33,7 +82,7 @@ export default function AdminDashboard() {
       totalTransactions,
       advertiserBudget,
     };
-  }, [transactions, withdrawals]);
+  }, [effectiveTransactions, effectiveWithdrawals]);
 
   if (user?.role !== "admin") {
     return (
@@ -54,12 +103,17 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="card p-5">
           <p className="text-xs uppercase tracking-wide text-slatec">
             Pending withdrawals
           </p>
-          <p className="mt-2 font-sora text-2xl">{withdrawals.length}</p>
+          <p className="mt-2 font-sora text-2xl">
+            {
+              effectiveWithdrawals.filter((item) => item.status === "pending")
+                .length
+            }
+          </p>
         </div>
         <div className="card p-5">
           <p className="text-xs uppercase tracking-wide text-slatec">
@@ -84,6 +138,12 @@ export default function AdminDashboard() {
           <p className="mt-2 font-sora text-2xl">
             {summary.advertiserBudget.toLocaleString()} coins
           </p>
+        </div>
+        <div className="card p-5">
+          <p className="text-xs uppercase tracking-wide text-slatec">
+            Registered users
+          </p>
+          <p className="mt-2 font-sora text-2xl">{users.length}</p>
         </div>
       </div>
 
@@ -115,7 +175,7 @@ export default function AdminDashboard() {
             Recent activity
           </h2>
           <div className="space-y-2 text-sm text-slatec">
-            {transactions.slice(0, 6).map((tx) => (
+            {effectiveTransactions.slice(0, 6).map((tx) => (
               <div
                 key={tx.id}
                 className="flex items-center justify-between rounded-xl border border-border px-3 py-2"
@@ -131,7 +191,9 @@ export default function AdminDashboard() {
                 </span>
               </div>
             ))}
-            {transactions.length === 0 && <p>No activity recorded yet.</p>}
+            {effectiveTransactions.length === 0 && (
+              <p>No activity recorded yet.</p>
+            )}
           </div>
         </div>
       </div>

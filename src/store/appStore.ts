@@ -10,7 +10,11 @@ import type {
 } from "../types";
 import { useAuthStore } from "./authStore";
 import { useGamificationStore } from "./gamificationStore";
-import { cocobaseTasks } from "../services/cocobase";
+import {
+  cocobaseNotifications,
+  cocobaseTasks,
+  cocobaseWallet,
+} from "../services/cocobase";
 
 interface UserAppData {
   tasks: Task[];
@@ -39,6 +43,7 @@ interface AppState extends UserAppData {
   addTransaction: (tx: Omit<Transaction, "id" | "createdAt">) => void;
   completeTask: (taskId: string, proof: string) => Task | undefined;
   addWithdrawal: (w: Omit<Withdrawal, "id" | "createdAt" | "status">) => void;
+  setNotifications: (notifications: Notification[]) => void;
   addNotification: (
     n: Omit<Notification, "id" | "createdAt" | "isRead">,
   ) => void;
@@ -166,6 +171,36 @@ export const useAppStore = create<AppState>((set, get) => {
     loadUserData: (userId) => {
       const data = loadFromStorage(userId);
       set({ currentUserId: userId, ...data });
+
+      void Promise.all([
+        cocobaseWallet.listTransactions(userId),
+        cocobaseWallet.listWithdrawals(userId),
+        cocobaseNotifications.list(userId),
+      ])
+        .then(([transactions, withdrawals, notifications]) => {
+          const nextTransactions =
+            transactions.length > 0 ? transactions : data.transactions;
+          const nextWithdrawals =
+            withdrawals.length > 0 ? withdrawals : data.withdrawals;
+          const nextNotifications =
+            notifications.length > 0 ? notifications : data.notifications;
+
+          set((state) => ({
+            ...state,
+            transactions: nextTransactions,
+            withdrawals: nextWithdrawals,
+            notifications: nextNotifications,
+          }));
+
+          saveToStorage(userId, {
+            transactions: nextTransactions,
+            withdrawals: nextWithdrawals,
+            notifications: nextNotifications,
+          });
+        })
+        .catch((error) => {
+          console.warn("Failed to hydrate wallet data from Cocobase", error);
+        });
     },
 
     clearUserData: () => {
@@ -225,16 +260,30 @@ export const useAppStore = create<AppState>((set, get) => {
 
     addTransaction: (tx) => {
       const state = get();
+      const nextTransaction = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        ...tx,
+      };
+
       persistCurrent({
-        transactions: [
-          {
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            ...tx,
-          },
-          ...state.transactions,
-        ],
+        transactions: [nextTransaction, ...state.transactions],
       });
+
+      const userId = useAuthStore.getState().user?.id ?? state.currentUserId;
+      if (userId) {
+        void cocobaseWallet
+          .createTransaction({
+            userId,
+            type: nextTransaction.type,
+            amount: nextTransaction.amount,
+            description: nextTransaction.description,
+            createdAt: nextTransaction.createdAt,
+          })
+          .catch((error) => {
+            console.warn("Failed to sync transaction to Cocobase", error);
+          });
+      }
     },
 
     completeTask: (taskId, proof) => {
@@ -303,6 +352,8 @@ export const useAppStore = create<AppState>((set, get) => {
       return updatedTask;
     },
 
+    setNotifications: (notifications) => persistCurrent({ notifications }),
+
     addWithdrawal: (w) => {
       const state = get();
 
@@ -336,17 +387,32 @@ export const useAppStore = create<AppState>((set, get) => {
 
     addNotification: (n) => {
       const state = get();
+      const nextNotification = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        isRead: false,
+        ...n,
+      };
+
       persistCurrent({
-        notifications: [
-          {
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            isRead: false,
-            ...n,
-          },
-          ...state.notifications,
-        ],
+        notifications: [nextNotification, ...state.notifications],
       });
+
+      const userId = useAuthStore.getState().user?.id ?? state.currentUserId;
+      if (userId) {
+        void cocobaseNotifications
+          .create({
+            userId,
+            type: nextNotification.type,
+            title: nextNotification.title,
+            message: nextNotification.message,
+            isRead: nextNotification.isRead,
+            createdAt: nextNotification.createdAt,
+          })
+          .catch((error) => {
+            console.warn("Failed to sync notification to Cocobase", error);
+          });
+      }
     },
 
     markAllNotificationsRead: () => {

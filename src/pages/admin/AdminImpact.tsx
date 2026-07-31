@@ -1,9 +1,26 @@
-import { useMemo } from "react";
-import { useAppStore } from "../../store/appStore";
+import { useEffect, useMemo, useState } from "react";
+import { cocobaseWallet } from "../../services/cocobase";
+import type { Transaction } from "../../types";
 import { calculateAdvertiserImpact } from "../../utils/transactionMath";
 
 export default function AdminImpact() {
-  const { transactions } = useAppStore();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadTransactions = async () => {
+      const data = await cocobaseWallet.listTransactions();
+      if (!active) return;
+      setTransactions(data);
+    };
+
+    void loadTransactions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const impact = useMemo(() => {
     const advertiserBudget = transactions

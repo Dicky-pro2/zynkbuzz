@@ -44,6 +44,7 @@ export default function CreateTaskForm() {
   const [instructions, setInstructions] = useState("");
   const [reward, setReward] = useState(10);
   const [slots, setSlots] = useState(10);
+  const [minQualityScore, setMinQualityScore] = useState(0);
 
   const totalCost = reward * slots;
   const impactPreview = calculateAdvertiserImpact(totalCost);
@@ -81,6 +82,7 @@ export default function CreateTaskForm() {
         reward,
         totalSlots: slots,
         status: "active",
+        minQualityScore,
       });
 
       if (!createdTask) {
@@ -108,6 +110,7 @@ export default function CreateTaskForm() {
 
       setUrl("");
       setInstructions("");
+      setMinQualityScore(0);
     } catch (error) {
       console.error("Failed to create task", error);
       notify.error("Could not publish the task. Please try again.");
@@ -212,6 +215,20 @@ export default function CreateTaskForm() {
             onChange={(e) => setSlots(Math.max(1, Number(e.target.value)))}
           />
         </div>
+      </div>
+
+      <div>
+        <label className="label">Minimum quality score</label>
+        <select
+          className="input"
+          value={minQualityScore}
+          onChange={(e) => setMinQualityScore(Number(e.target.value))}
+        >
+          <option value={0}>Any earner</option>
+          <option value={40}>40+</option>
+          <option value={60}>60+</option>
+          <option value={80}>80+</option>
+        </select>
       </div>
 
       {/* Total cost preview */}

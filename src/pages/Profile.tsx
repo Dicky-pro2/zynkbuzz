@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Moon, Sun } from "lucide-react";
@@ -10,7 +10,7 @@ import { notify } from "../utils/notify";
 import { cocobaseProfile, cocobaseAuth } from "../services/cocobase";
 
 export default function Profile() {
-  const { user, updateName, logout } = useAuthStore();
+  const { user, updateName, updateAvatar, logout } = useAuthStore();
   const { transactions, submissions, myTasks } = useAppStore();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -18,9 +18,37 @@ export default function Profile() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(user?.name ?? "");
   const [savingName, setSavingName] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const isAdvertiser = user?.role === "advertiser";
   const isVerified = user?.isEmailVerified ?? false;
+
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    if (!file.type.startsWith("image/")) {
+      notify.error("Please select a valid image file.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const avatarUrl = await cocobaseProfile.uploadAvatar(user.id, file);
+      updateAvatar(avatarUrl ?? null);
+      notify.success("Profile photo updated successfully!");
+    } catch (error) {
+      notify.error(
+        error instanceof Error
+          ? error.message
+          : "Could not upload your profile photo.",
+      );
+    } finally {
+      setUploadingAvatar(false);
+      event.target.value = "";
+    }
+  };
 
   const handleSaveName = async () => {
     if (!nameInput.trim()) {
@@ -86,13 +114,21 @@ export default function Profile() {
       >
         <div className="flex items-start gap-4">
           <div
-            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-2xl font-sora font-bold flex-shrink-0 ${
+            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-2xl font-sora font-bold flex-shrink-0 overflow-hidden ${
               isAdvertiser
                 ? "bg-violet/20 text-violet-light"
                 : "bg-emerald2/20 text-emerald2"
             }`}
           >
-            {user?.name?.charAt(0).toUpperCase() ?? "?"}
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name ?? "Profile"}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              (user?.name?.charAt(0).toUpperCase() ?? "?")
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -136,6 +172,22 @@ export default function Profile() {
               </div>
             )}
             <p className="text-sm text-slatec truncate">{user?.email}</p>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="mt-2 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-slatec transition-colors hover:text-white disabled:opacity-60"
+            >
+              <Icons.Upload size={13} />
+              {uploadingAvatar ? "Uploading…" : "Upload photo"}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
           </div>
         </div>
       </motion.div>
@@ -390,7 +442,8 @@ function ChangePasswordCard() {
     else if (!passwordRegex.test(newPassword)) {
       errs.newPassword = "Use 8+ chars with upper, lower, number and symbol";
     }
-    if (!confirmPassword) errs.confirmPassword = "Please confirm your new password";
+    if (!confirmPassword)
+      errs.confirmPassword = "Please confirm your new password";
     else if (newPassword !== confirmPassword) {
       errs.confirmPassword = "Passwords do not match";
     }

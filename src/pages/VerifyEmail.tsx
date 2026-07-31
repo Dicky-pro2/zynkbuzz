@@ -84,7 +84,7 @@ export default function VerifyEmail() {
           to="/"
           className="font-sora font-extrabold text-xl inline-block mb-8"
         >
-          Engage<span className="text-violet-light">Pay</span>
+          Zynk<span className="text-violet-light">Buzz</span>
         </Link>
 
         {/* Verifying state */}

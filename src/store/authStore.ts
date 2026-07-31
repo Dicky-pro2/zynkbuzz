@@ -12,6 +12,7 @@ interface AuthState {
   setTokens: (accessToken: string, refreshToken: string) => void;
   updateWallet: (newBalance: number) => void;
   updateName: (name: string) => void;
+  updateAvatar: (avatar: string | null) => void;
   verifyEmail: () => void;
   recordDailyActivity: () => number;
   logout: () => void;
@@ -66,6 +67,11 @@ export const useAuthStore = create<AuthState>()(
       updateName: (name) =>
         set((state) => ({
           user: state.user ? { ...state.user, name } : state.user,
+        })),
+
+      updateAvatar: (avatar) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, avatar } : state.user,
         })),
 
       verifyEmail: () =>

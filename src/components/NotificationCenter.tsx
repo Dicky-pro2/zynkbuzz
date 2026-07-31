@@ -1,6 +1,8 @@
 import { Bell, Check, AlertCircle, Gift, Clock } from "lucide-react";
 import { useState, useEffect } from "react";
+import { cocobaseNotifications } from "../services/cocobase";
 import { useAppStore } from "../store/appStore";
+import { useAuthStore } from "../store/authStore";
 
 export default function NotificationCenter() {
   const notifications = useAppStore((s) => s.notifications);
@@ -8,12 +10,32 @@ export default function NotificationCenter() {
   const markAllNotificationsRead = useAppStore(
     (s) => s.markAllNotificationsRead,
   );
+  const setNotifications = useAppStore((s) => s.setNotifications);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     setUnreadCount(notifications.filter((n) => !n.isRead).length);
   }, [notifications]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const unsubscribe = cocobaseNotifications.subscribe(
+      currentUserId,
+      (nextNotifications) => {
+        const currentNotifications = useAppStore.getState().notifications;
+        setNotifications(
+          nextNotifications.length > 0
+            ? nextNotifications
+            : currentNotifications,
+        );
+      },
+    );
+
+    return unsubscribe;
+  }, [currentUserId, setNotifications]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {

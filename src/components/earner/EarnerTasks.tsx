@@ -5,6 +5,7 @@ import EarnTaskCard from "./EarnTaskCard";
 import TaskModal from "./TaskModal";
 import { Icons } from "../icons/Icons";
 import { PlatformIcon } from "../icons/PlatformIcons";
+import { useAuthStore } from "../../store/authStore";
 import type { Task } from "../../types";
 
 type PlatformFilter = "all" | string;
@@ -30,6 +31,7 @@ const TASK_TYPE_OPTIONS = [
 export default function EarnerTasks() {
   // Purpose: keep the earner browse view backed by the latest live task feed.
   const setTasks = useAppStore((s) => s.setTasks);
+  const user = useAuthStore((s) => s.user);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -80,16 +82,31 @@ export default function EarnerTasks() {
     };
   }, [refreshTasks]);
 
-  // Purpose: only show tasks that are still open for the current earner.
+  const userQualityScore = user?.taskQualityScore ?? 100;
+
+  // Purpose: only show tasks that are still open for the current earner and meet their quality threshold.
   const availableTasks = useMemo(
     () =>
       taskFeed.filter(
         (task) =>
           task.status === "active" &&
           task.slotsLeft > 0 &&
-          !task.completedByCurrentUser,
+          !task.completedByCurrentUser &&
+          (task.minQualityScore ?? 0) <= userQualityScore,
       ),
-    [taskFeed],
+    [taskFeed, userQualityScore],
+  );
+
+  const hiddenByQuality = useMemo(
+    () =>
+      taskFeed.filter(
+        (task) =>
+          task.status === "active" &&
+          task.slotsLeft > 0 &&
+          !task.completedByCurrentUser &&
+          (task.minQualityScore ?? 0) > userQualityScore,
+      ),
+    [taskFeed, userQualityScore],
   );
 
   const filteredTasks = useMemo(() => {
@@ -105,7 +122,13 @@ export default function EarnerTasks() {
     !isRefreshing &&
     !loadError &&
     filteredTasks.length === 0 &&
-    availableTasks.length === 0;
+    availableTasks.length === 0 &&
+    hiddenByQuality.length === 0;
+  const showQualityGateMessage =
+    !isRefreshing &&
+    !loadError &&
+    filteredTasks.length === 0 &&
+    hiddenByQuality.length > 0;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -197,7 +220,18 @@ export default function EarnerTasks() {
       ) : null}
 
       {/* Purpose: show a friendly empty state when the live task feed has no open work right now. */}
-      {showPlaceholder ? (
+      {showQualityGateMessage ? (
+        <div className="card border-dashed border-border/70 p-8 sm:p-10 text-center text-slatec">
+          <Icons.Star size={28} className="mx-auto mb-3 opacity-40" />
+          <p className="text-sm font-medium text-white">
+            Your quality score is blocking some tasks.
+          </p>
+          <p className="mt-1 text-xs sm:text-sm">
+            You currently have a quality score of {userQualityScore}. Complete
+            more approved tasks to unlock higher-tier opportunities.
+          </p>
+        </div>
+      ) : showPlaceholder ? (
         <div className="card border-dashed border-border/70 p-8 sm:p-10 text-center text-slatec">
           <Icons.Tasks size={28} className="mx-auto mb-3 opacity-40" />
           <p className="text-sm font-medium text-white">

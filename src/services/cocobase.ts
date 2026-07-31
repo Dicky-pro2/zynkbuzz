@@ -1,7 +1,14 @@
 import { Cocobase, type AppUser, type Document } from "cocobase";
 import env from "../config/env";
 import { authAPI } from "./api";
-import type { Role, Task, User } from "../types";
+import type {
+  Notification,
+  Role,
+  Task,
+  Transaction,
+  User,
+  Withdrawal,
+} from "../types";
 
 const hasCocobaseConfig = Boolean(
   env.COCOBASE_API_KEY && env.COCOBASE_PROJECT_ID,
@@ -391,6 +398,7 @@ function normalizeTask(document: Document<Record<string, unknown>>): Task {
     completionCount,
     status: (asString(data.status) as Task["status"] | undefined) ?? "active",
     createdAt: asString(data.createdAt) ?? asString(document.created_at) ?? "",
+    minQualityScore: asNumber(data.minQualityScore) || undefined,
   };
 }
 
@@ -861,6 +869,257 @@ function writeStoredCollection<T>(storageKey: string, items: T[]) {
   }
 }
 
+function normalizeTransaction(
+  document: Document<Record<string, unknown>>,
+): Transaction {
+  const data = asRecord(document.data);
+
+  return {
+    id: asString(data.id) ?? document.id,
+    type: (asString(data.type) as Transaction["type"] | undefined) ?? "deposit",
+    amount: asNumber(data.amount),
+    description: asString(data.description) ?? "",
+    createdAt:
+      asString(data.createdAt) ??
+      asString(data.created_at) ??
+      asString(document.created_at) ??
+      "",
+  };
+}
+
+function normalizeWithdrawal(
+  document: Document<Record<string, unknown>>,
+): Withdrawal {
+  const data = asRecord(document.data);
+
+  return {
+    id: asString(data.id) ?? document.id,
+    amount: asNumber(data.amount),
+    method:
+      (asString(data.method) as Withdrawal["method"] | undefined) ??
+      "bank_transfer",
+    accountDetails: asString(data.accountDetails) ?? "",
+    bankName: asString(data.bankName),
+    accountName: asString(data.accountName),
+    accountNumber: asString(data.accountNumber),
+    status:
+      (asString(data.status) as Withdrawal["status"] | undefined) ?? "pending",
+    createdAt:
+      asString(data.createdAt) ??
+      asString(data.created_at) ??
+      asString(document.created_at) ??
+      "",
+  };
+}
+
+function normalizeNotification(
+  document: Document<Record<string, unknown>>,
+): Notification {
+  const data = asRecord(document.data);
+
+  return {
+    id: asString(data.id) ?? document.id,
+    type:
+      (asString(data.type) as Notification["type"] | undefined) ?? "welcome",
+    title: asString(data.title) ?? "Notification",
+    message: asString(data.message) ?? "",
+    isRead: asBoolean(data.isRead, false),
+    createdAt:
+      asString(data.createdAt) ??
+      asString(data.created_at) ??
+      asString(document.created_at) ??
+      "",
+  };
+}
+
+function readAvatarUrlFromPayload(payload: unknown): string | null {
+  const root = asRecord(payload);
+  const nestedData = asRecord(root.data);
+  const mergedData = { ...nestedData, ...root } as Record<string, unknown>;
+
+  return (
+    asString(
+      pickFirstDefined(
+        mergedData.avatar,
+        mergedData.profilePicture,
+        mergedData.imageUrl,
+        mergedData.url,
+        nestedData.avatar,
+        nestedData.profilePicture,
+      ),
+    ) ?? null
+  );
+}
+
+function toDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeAdminUser(appUser: AppUser) {
+  const normalized = normalizeUser(appUser, "earner");
+
+  return {
+    id: appUser.id,
+    email: appUser.email,
+    name: normalized?.name ?? appUser.email.split("@")[0] ?? "User",
+    role: normalized?.role ?? "earner",
+    createdAt: appUser.created_at,
+    isEmailVerified: normalized?.isEmailVerified ?? false,
+    avatar: normalized?.avatar ?? null,
+    walletBalance: normalized?.walletBalance ?? 0,
+  };
+}
+
+export const cocobaseNotifications = {
+  async list(userId?: string) {
+    if (!cocobaseClient) return [];
+
+    try {
+      const documents = await cocobaseClient.listDocuments<
+        Record<string, unknown>
+      >("notifications", {
+        sort: "created_at",
+        order: "desc",
+      });
+
+      return documents
+        .filter((document) => {
+          const data = asRecord(document.data);
+          const docUserId = pickFirstDefined(
+            asString(data.userId),
+            asString(data.recipientId),
+            asString(data.ownerId),
+          );
+
+          return !userId || !docUserId || docUserId === userId;
+        })
+        .map(normalizeNotification);
+    } catch (error) {
+      console.warn("Failed to load Cocobase notifications", error);
+      return [];
+    }
+  },
+
+  async create(payload: {
+    userId: string;
+    type: Notification["type"];
+    title: string;
+    message: string;
+    isRead?: boolean;
+    createdAt?: string;
+  }) {
+    const notificationPayload = {
+      ...payload,
+      isRead: payload.isRead ?? false,
+      createdAt: payload.createdAt ?? new Date().toISOString(),
+    };
+
+    if (!cocobaseClient) {
+      return {
+        id: `local-notification-${Date.now()}`,
+        ...notificationPayload,
+      } as Notification;
+    }
+
+    try {
+      const document = await cocobaseClient.createDocument(
+        "notifications",
+        notificationPayload,
+      );
+      return normalizeNotification(document);
+    } catch (error) {
+      console.warn("Failed to sync notification to Cocobase", error);
+      return {
+        id: `local-notification-${Date.now()}`,
+        ...notificationPayload,
+      } as Notification;
+    }
+  },
+
+  subscribe(userId: string, onChange: (notifications: Notification[]) => void) {
+    if (!cocobaseClient) {
+      onChange([]);
+      return () => undefined;
+    }
+
+    return cocobaseClient.onSnapshot<Record<string, unknown>>(
+      "notifications",
+      (documents) => {
+        const nextNotifications = documents
+          .filter((document) => {
+            const data = asRecord(document.data);
+            const docUserId = pickFirstDefined(
+              asString(data.userId),
+              asString(data.recipientId),
+              asString(data.ownerId),
+            );
+
+            return !docUserId || docUserId === userId;
+          })
+          .map(normalizeNotification);
+
+        onChange(nextNotifications);
+      },
+    );
+  },
+};
+
+export const cocobaseAdmin = {
+  async listUsers() {
+    if (!cocobaseClient) return [];
+
+    try {
+      const response = await cocobaseClient.auth.listUsers({ limit: 100 });
+      return (response?.data ?? []).map(normalizeAdminUser);
+    } catch (error) {
+      console.warn("Failed to load Cocobase users", error);
+      return [];
+    }
+  },
+
+  async listWithdrawals(userId?: string) {
+    return cocobaseWallet.listWithdrawals(userId);
+  },
+
+  async updateWithdrawalStatus(
+    withdrawalId: string,
+    status: Withdrawal["status"],
+  ) {
+    if (!cocobaseClient) {
+      return null;
+    }
+
+    try {
+      const document = await cocobaseClient.updateDocument(
+        "withdrawals",
+        withdrawalId,
+        { status },
+      );
+      return normalizeWithdrawal(document);
+    } catch (error) {
+      console.warn("Failed to update Cocobase withdrawal status", error);
+      return null;
+    }
+  },
+
+  async listTasks() {
+    if (!cocobaseClient) return [];
+
+    try {
+      return cocobaseTasks.list();
+    } catch (error) {
+      console.warn("Failed to load Cocobase tasks for admin view", error);
+      return [];
+    }
+  },
+};
+
 export const cocobaseProfile = {
   async updateName(userId: string, name: string) {
     const payload = {
@@ -900,6 +1159,46 @@ export const cocobaseProfile = {
       ];
       writeStoredCollection("zynk-profiles", next);
       return { id: `local-profile-${userId}`, ...payload };
+    }
+  },
+
+  async uploadAvatar(userId: string, file: File) {
+    const localFallback = async () => {
+      const avatarUrl = await toDataUrl(file);
+      const existing =
+        readStoredCollection<Record<string, unknown>>("zynk-profiles");
+      const next = [
+        ...existing.filter(
+          (item) => (item.userId as string | undefined) !== userId,
+        ),
+        {
+          id: `local-profile-${userId}`,
+          userId,
+          avatar: avatarUrl,
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+      writeStoredCollection("zynk-profiles", next);
+      return avatarUrl;
+    };
+
+    if (!cocobaseClient) {
+      return localFallback();
+    }
+
+    try {
+      const response = await cocobaseClient.auth.updateUserWithFiles({
+        data: { updatedAt: new Date().toISOString() },
+        files: { avatar: file },
+      });
+      const avatarUrl = readAvatarUrlFromPayload(response);
+      if (avatarUrl) {
+        return avatarUrl;
+      }
+      return localFallback();
+    } catch (error) {
+      console.warn("Cocobase avatar upload failed; using local preview", error);
+      return localFallback();
     }
   },
 };
@@ -994,6 +1293,86 @@ export const cocobaseSubmissions = {
 };
 
 export const cocobaseWallet = {
+  async listTransactions(userId?: string) {
+    if (!cocobaseClient) return [];
+
+    try {
+      const documents = await cocobaseClient.listDocuments<
+        Record<string, unknown>
+      >("transactions", {
+        sort: "created_at",
+        order: "desc",
+      });
+
+      return documents
+        .filter((document) => {
+          const data = asRecord(document.data);
+          return !userId || asString(data.userId) === userId;
+        })
+        .map(normalizeTransaction);
+    } catch (error) {
+      console.warn("Failed to load Cocobase transactions", error);
+      return [];
+    }
+  },
+
+  async createTransaction(payload: {
+    userId: string;
+    type: Transaction["type"];
+    amount: number;
+    description: string;
+    createdAt?: string;
+  }) {
+    const transactionPayload = {
+      ...payload,
+      createdAt: payload.createdAt ?? new Date().toISOString(),
+    };
+
+    if (!cocobaseClient) {
+      return {
+        id: `local-transaction-${Date.now()}`,
+        ...transactionPayload,
+      } as Transaction;
+    }
+
+    try {
+      const document = await cocobaseClient.createDocument(
+        "transactions",
+        transactionPayload,
+      );
+      return normalizeTransaction(document);
+    } catch (error) {
+      console.warn("Failed to sync transaction to Cocobase", error);
+      return {
+        id: `local-transaction-${Date.now()}`,
+        ...transactionPayload,
+      } as Transaction;
+    }
+  },
+
+  async listWithdrawals(userId?: string) {
+    if (!cocobaseClient) return [];
+
+    try {
+      const documents = await cocobaseClient.listDocuments<
+        Record<string, unknown>
+      >("withdrawals", {
+        sort: "created_at",
+        order: "desc",
+      });
+
+      return documents
+        .filter((document) => {
+          const data = asRecord(document.data);
+          return !userId || asString(data.userId) === userId;
+        })
+        .map(normalizeWithdrawal);
+    } catch (error) {
+      console.warn("Failed to load Cocobase withdrawals", error);
+      return [];
+    }
+  },
+
   async requestWithdrawal(payload: {
     userId: string;
     amount: number;
@@ -1001,6 +1380,9 @@ export const cocobaseWallet = {
     accountDetails: string;
     status?: string;
     createdAt?: string;
+    bankName?: string;
+    accountName?: string;
+    accountNumber?: string;
   }) {
     const withdrawalPayload = {
       ...payload,
@@ -1008,13 +1390,26 @@ export const cocobaseWallet = {
       createdAt: payload.createdAt ?? new Date().toISOString(),
     };
 
-    if (!cocobaseClient) throw new Error("Cocobase is not configured");
+    if (!cocobaseClient) {
+      return {
+        id: `local-withdrawal-${Date.now()}`,
+        ...withdrawalPayload,
+      } as Withdrawal;
+    }
 
-    const document = await cocobaseClient.createDocument(
-      "withdrawals",
-      withdrawalPayload,
-    );
-    return { id: document.id, ...withdrawalPayload };
+    try {
+      const document = await cocobaseClient.createDocument(
+        "withdrawals",
+        withdrawalPayload,
+      );
+      return normalizeWithdrawal(document);
+    } catch (error) {
+      console.warn("Failed to sync withdrawal to Cocobase", error);
+      return {
+        id: `local-withdrawal-${Date.now()}`,
+        ...withdrawalPayload,
+      } as Withdrawal;
+    }
   },
 };
 
@@ -1045,6 +1440,7 @@ export const cocobaseTasks = {
       advertiserId?: string;
       advertiserEmail?: string;
       advertiserDisplayName?: string;
+      minQualityScore?: number;
     },
   ) {
     const taskPayload = {
@@ -1061,6 +1457,7 @@ export const cocobaseTasks = {
       slotsLeft: payload.totalSlots,
       status: payload.status ?? "active",
       taskSubmissions: payload.taskSubmissions ?? [],
+      minQualityScore: payload.minQualityScore ?? 0,
     };
 
     if (!cocobaseClient) {
