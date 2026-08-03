@@ -1,82 +1,91 @@
-import { useState, useMemo } from 'react';
-import { useAuthStore } from '../../store/authStore';
-import { useAppStore } from '../../store/appStore';
-import AdvertiserTaskCard from './AdvertiserTaskCard';
-import { Icons } from '../icons/Icons';
-import { notify } from '../../utils/notify';
-import type { Task } from '../../types';
-import { cocobaseTasks } from '../../services/cocobase';
+import { useState, useMemo } from "react";
+import { useAuthStore } from "../../store/authStore";
+import { useAppStore } from "../../store/appStore";
+import AdvertiserTaskCard from "./AdvertiserTaskCard";
+import { Icons } from "../icons/Icons";
+import { notify } from "../../utils/notify";
+import type { Task } from "../../types";
+import { cocobaseTasks } from "../../services/cocobase";
 
-type FilterType = 'all' | 'active' | 'paused' | 'completed' | 'cancelled';
+type FilterType = "all" | "active" | "paused" | "completed" | "cancelled";
 
 const filters: {
   key: FilterType;
   label: string;
   icon: React.ReactNode;
 }[] = [
-  { key: 'all', label: 'All Tasks', icon: <Icons.Tasks size={13} /> },
-  { key: 'active', label: 'Active', icon: <Icons.Play size={13} /> },
-  { key: 'paused', label: 'Paused', icon: <Icons.Pause size={13} /> },
-  { key: 'completed', label: 'Completed', icon: <Icons.Approve size={13} /> },
-  { key: 'cancelled', label: 'Cancelled', icon: <Icons.Cancel size={13} /> },
+  { key: "all", label: "All Tasks", icon: <Icons.Tasks size={13} /> },
+  { key: "active", label: "Active", icon: <Icons.Play size={13} /> },
+  { key: "paused", label: "Paused", icon: <Icons.Pause size={13} /> },
+  { key: "completed", label: "Completed", icon: <Icons.Approve size={13} /> },
+  { key: "cancelled", label: "Cancelled", icon: <Icons.Cancel size={13} /> },
 ];
 
 export default function AdvertiserTasks() {
   const { user, updateWallet } = useAuthStore();
-  const { myTasks, updateTaskStatus, pushActivity, addTransaction, addNotification } =
-    useAppStore();
-  const [filter, setFilter] = useState<FilterType>('all');
+  const {
+    myTasks,
+    updateTaskStatus,
+    pushActivity,
+    addTransaction,
+    addNotification,
+  } = useAppStore();
+  const [filter, setFilter] = useState<FilterType>("all");
 
   const filteredTasks = useMemo(() => {
-    if (filter === 'all') return myTasks;
+    if (filter === "all") return myTasks;
     return myTasks.filter((t) => t.status === filter);
   }, [myTasks, filter]);
 
-  const counts = useMemo(() => ({
-    all: myTasks.length,
-    active: myTasks.filter((t) => t.status === 'active').length,
-    paused: myTasks.filter((t) => t.status === 'paused').length,
-    completed: myTasks.filter((t) => t.status === 'completed').length,
-    cancelled: myTasks.filter((t) => t.status === 'cancelled').length,
-  }), [myTasks]);
+  const counts = useMemo(
+    () => ({
+      all: myTasks.length,
+      active: myTasks.filter((t) => t.status === "active").length,
+      paused: myTasks.filter((t) => t.status === "paused").length,
+      completed: myTasks.filter((t) => t.status === "completed").length,
+      cancelled: myTasks.filter((t) => t.status === "cancelled").length,
+    }),
+    [myTasks],
+  );
 
-  const handleUpdateStatus = (taskId: string, status: Task['status']) => {
+  const handleUpdateStatus = (taskId: string, status: Task["status"]) => {
     const task = myTasks.find((t) => t.id === taskId);
     if (!task || !user) return;
 
-    if (status === 'cancelled' && task.status !== 'cancelled') {
+    if (status === "cancelled" && task.status !== "cancelled") {
       const refund = task.slotsLeft * task.reward;
       if (refund > 0) {
+        // Server-side wallet reconciliation is handled by the backend mutation endpoint.
         updateWallet(user.walletBalance + refund);
         pushActivity(
           `Task cancelled — ${refund.toLocaleString()} coins refunded`,
-          'green'
+          "green",
         );
         addTransaction({
-          type: 'refund',
+          type: "refund",
           amount: refund,
           description: `Refund for cancelled task: ${task.taskType} on ${task.platform}`,
         });
         addNotification({
-          type: 'task_approved',
-          title: 'Task Cancelled',
+          type: "task_approved",
+          title: "Task Cancelled",
           message: `Your task was cancelled. ${refund.toLocaleString()} coins have been refunded.`,
         });
         notify.success(
-          `Task cancelled. ${refund.toLocaleString()} coins refunded to your wallet.`
+          `Task cancelled. ${refund.toLocaleString()} coins refunded to your wallet.`,
         );
       }
-    } else if (status === 'paused') {
-      notify.info('Task paused — no new submissions will be accepted.');
+    } else if (status === "paused") {
+      notify.info("Task paused — no new submissions will be accepted.");
       pushActivity(
         `Task paused: ${task.taskType} on ${task.platform}`,
-        'violet'
+        "violet",
       );
-    } else if (status === 'active' && task.status === 'paused') {
-      notify.success('Task resumed!');
+    } else if (status === "active" && task.status === "paused") {
+      notify.success("Task resumed!");
       pushActivity(
         `Task resumed: ${task.taskType} on ${task.platform}`,
-        'violet'
+        "violet",
       );
     }
 
@@ -102,17 +111,19 @@ export default function AdvertiserTasks() {
             onClick={() => setFilter(f.key)}
             className={`rounded-xl border px-4 py-1.5 text-sm font-semibold transition-all flex items-center gap-1.5 ${
               filter === f.key
-                ? 'border-violet bg-violet/15 text-violet-light'
-                : 'border-border text-slatec hover:border-white/20'
+                ? "border-violet bg-violet/15 text-violet-light"
+                : "border-border text-slatec hover:border-white/20"
             }`}
           >
             {f.icon}
             {f.label}
-            <span className={`text-xs rounded-full px-1.5 py-0.5 font-normal ${
-              filter === f.key
-                ? 'bg-violet/20 text-violet-light'
-                : 'bg-border text-slatec'
-            }`}>
+            <span
+              className={`text-xs rounded-full px-1.5 py-0.5 font-normal ${
+                filter === f.key
+                  ? "bg-violet/20 text-violet-light"
+                  : "bg-border text-slatec"
+              }`}
+            >
               {counts[f.key]}
             </span>
           </button>
@@ -125,8 +136,8 @@ export default function AdvertiserTasks() {
           <Icons.Tasks size={32} className="mx-auto mb-3 opacity-30" />
           <p>
             {myTasks.length === 0
-              ? 'No tasks yet. Create your first task from the Overview tab!'
-              : 'No tasks match this filter.'}
+              ? "No tasks yet. Create your first task from the Overview tab!"
+              : "No tasks match this filter."}
           </p>
         </div>
       ) : (

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "../icons/Icons";
 import { useAppStore } from "../../store/appStore";
 import { cocobaseSubmissions } from "../../services/cocobase";
-//import { PLATFORM_ICONS } from '../../services/mockData';
 import { notify } from "../../utils/notify";
 import { PlatformIcon } from "../icons/PlatformIcons";
 //import type { TaskSubmission } from '../../types';

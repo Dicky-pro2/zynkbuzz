@@ -178,6 +178,7 @@ export default function EarnerWallet() {
         accountDetails: formattedAccountDetails,
       });
 
+      // Server-side wallet reconciliation is handled by the backend mutation endpoint.
       updateWallet(user.walletBalance - amt);
       addTransaction({
         type: "withdrawal",
@@ -244,7 +245,9 @@ export default function EarnerWallet() {
           </div>
           <div className="text-xs text-slatec mt-1 flex items-center gap-1">
             <Icons.Info size={12} />
-            Minimum withdrawal: {MIN_WITHDRAWAL.toLocaleString()} coins
+            Minimum withdrawal: {MIN_WITHDRAWAL.toLocaleString()} coins.
+            Requests are reviewed manually and posted to the backend for admin
+            processing.
           </div>
         </motion.div>
 

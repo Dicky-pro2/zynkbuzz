@@ -183,11 +183,6 @@ export default function Login() {
           Sign up
         </Link>
       </p>
-
-      <p className="text-center text-xs text-slatec/60 mt-3 leading-relaxed">
-        Demo tip: use adv@test.com to log in as Advertiser, earner@test.com as
-        Earner, or admin@test.com as Admin.
-      </p>
     </AuthShell>
   );
 }

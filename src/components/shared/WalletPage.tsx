@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Icons } from "../icons/Icons";
 import { useAuthStore } from "../../store/authStore";
 import { useAppStore } from "../../store/appStore";
+import { cocobaseWallet } from "../../services/cocobase";
 import { notify } from "../../utils/notify";
 import env from "../../config/env";
 import type { TransactionType } from "../../types";
@@ -115,17 +116,37 @@ export default function WalletPage() {
       amount: Math.round(amt * 100),
       currency: "NGN",
       ref: `wallet-${user.id}-${Date.now()}`,
-      callback: (response) => {
+      callback: async (response) => {
         setIsPaying(false);
-        updateWallet(user.walletBalance + amt);
-        addTransaction({
-          type: "deposit",
-          amount: amt,
-          description: "Wallet top-up",
-        });
-        notify.walletFunded(amt);
-        notify.success(`Payment confirmed. Reference: ${response.reference}`);
-        setCustomAmt("");
+
+        try {
+          const verified = await cocobaseWallet.verifyDeposit(
+            response.reference,
+            amt,
+            user.id,
+            amt,
+            "Wallet top-up",
+          );
+          if (!verified?.verified) {
+            throw new Error("Payment could not be verified.");
+          }
+
+          updateWallet(verified.walletBalance ?? user.walletBalance + amt);
+          addTransaction({
+            type: "deposit",
+            amount: amt,
+            description: "Wallet top-up",
+          });
+          notify.walletFunded(amt);
+          notify.success(`Payment confirmed. Reference: ${response.reference}`);
+          setCustomAmt("");
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Deposit verification failed.";
+          notify.error(message);
+        }
       },
       onClose: () => {
         setIsPaying(false);

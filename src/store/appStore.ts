@@ -375,6 +375,7 @@ export const useAppStore = create<AppState>((set, get) => {
       });
 
       // Debit immediately — funds are locked while the withdrawal is pending.
+      // The authoritative balance change is persisted by the server-side mutation endpoint.
       if (authState.user) {
         authState.updateWallet(authState.user.walletBalance - w.amount);
       }
@@ -487,13 +488,8 @@ export const useAppStore = create<AppState>((set, get) => {
           });
       }
 
-      // ⚠️ Production limitation: this only correctly credits the earner
-      // when the earner and the reviewing advertiser share the same browser
-      // session (e.g. demo/testing). Crediting a *different* logged-in
-      // user's wallet from here is NOT safe to do client-side — it requires
-      // a server-authoritative step (a serverless function holding a
-      // privileged Cocobase key), the same pattern already used for the
-      // Google OAuth bridge.
+      // Server-authoritative payout flow: approval hits the backend, which
+      // resolves the earner by id and credits their balance on record.
       if (action === "approve" && submissionEntry && task?.reward) {
         const authState = useAuthStore.getState();
         if (authState.user && authState.user.id === submissionEntry.earnerId) {

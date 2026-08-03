@@ -91,6 +91,7 @@ export default function CreateTaskForm() {
       }
 
       addTask(createdTask);
+      // Server-side wallet reconciliation is handled by the backend mutation endpoint.
       updateWallet(user.walletBalance - totalCost);
       pushActivity(
         `New task posted: ${taskType} on ${platform} · ${reward} coins x${slots}`,

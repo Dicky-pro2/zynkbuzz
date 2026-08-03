@@ -13,28 +13,6 @@ import type {
 const hasCocobaseConfig = Boolean(
   env.COCOBASE_API_KEY && env.COCOBASE_PROJECT_ID,
 );
-const LOCAL_AUTH_USERS_STORAGE_KEY = "zynk-local-auth-users";
-
-type LocalAuthUser = {
-  id: string;
-  name: string;
-  firstName: string;
-  lastName: string;
-  nickname: string | null;
-  email: string;
-  phoneNumber: string;
-  dateOfBirth: string;
-  gender: string;
-  password: string;
-  role: Role;
-  avatar: string | null;
-  walletBalance: number;
-  totalEarned: number;
-  totalSpent: number;
-  tasksCompleted: number;
-  tasksPosted: number;
-  isEmailVerified: boolean;
-};
 
 export const cocobaseClient = hasCocobaseConfig
   ? new Cocobase({
@@ -46,212 +24,6 @@ export const cocobaseClient = hasCocobaseConfig
   : null;
 
 export const isCocobaseEnabled = Boolean(cocobaseClient);
-
-function readLocalAuthUsers(): LocalAuthUser[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_AUTH_USERS_STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw) as Array<Partial<LocalAuthUser>>;
-    return parsed.filter((entry): entry is LocalAuthUser =>
-      Boolean(entry?.email && typeof entry.password === "string"),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalAuthUsers(users: LocalAuthUser[]) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(
-      LOCAL_AUTH_USERS_STORAGE_KEY,
-      JSON.stringify(users),
-    );
-  } catch {
-    // Ignore storage issues and continue with in-memory fallback.
-  }
-}
-
-function ensureDemoAuthUsers(): LocalAuthUser[] {
-  const existing = readLocalAuthUsers();
-  if (existing.length > 0) return existing;
-
-  const demoUsers: LocalAuthUser[] = [
-    {
-      id: "demo-advertiser",
-      name: "Demo Advertiser",
-      firstName: "Demo",
-      lastName: "Advertiser",
-      nickname: "demoadv",
-      email: "adv@test.com",
-      phoneNumber: "+10000000000",
-      dateOfBirth: "1990-01-01",
-      gender: "prefer_not_to_say",
-      password: "Password123!",
-      role: "advertiser",
-      avatar: null,
-      walletBalance: 2500,
-      totalEarned: 0,
-      totalSpent: 0,
-      tasksCompleted: 0,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-    {
-      id: "demo-earner",
-      name: "Demo Earner",
-      firstName: "Demo",
-      lastName: "Earner",
-      nickname: "demoearn",
-      email: "earner@test.com",
-      phoneNumber: "+10000000001",
-      dateOfBirth: "1990-01-01",
-      gender: "prefer_not_to_say",
-      password: "Password123!",
-      role: "earner",
-      avatar: null,
-      walletBalance: 340,
-      totalEarned: 1200,
-      totalSpent: 0,
-      tasksCompleted: 3,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-    {
-      id: "demo-admin",
-      name: "Demo Admin",
-      firstName: "Demo",
-      lastName: "Admin",
-      nickname: "demoadmin",
-      email: "admin@test.com",
-      phoneNumber: "+10000000002",
-      dateOfBirth: "1990-01-01",
-      gender: "prefer_not_to_say",
-      password: "Password123!",
-      role: "admin",
-      avatar: null,
-      walletBalance: 0,
-      totalEarned: 0,
-      totalSpent: 0,
-      tasksCompleted: 0,
-      tasksPosted: 0,
-      isEmailVerified: true,
-    },
-  ];
-
-  writeLocalAuthUsers(demoUsers);
-  return demoUsers;
-}
-
-function buildLocalAuthUser(payload: {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  role: Role;
-  phoneNumber: string;
-  dateOfBirth: string;
-  gender: string;
-}): LocalAuthUser {
-  return {
-    id: `local-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: `${payload.firstName} ${payload.lastName}`.trim() || "User",
-    firstName: payload.firstName.trim(),
-    lastName: payload.lastName.trim(),
-    nickname: null,
-    email: payload.email.trim().toLowerCase(),
-    phoneNumber: payload.phoneNumber,
-    dateOfBirth: payload.dateOfBirth,
-    gender: payload.gender,
-    password: payload.password,
-    role: payload.role,
-    avatar: null,
-    walletBalance: 0,
-    totalEarned: 0,
-    totalSpent: 0,
-    tasksCompleted: 0,
-    tasksPosted: 0,
-    isEmailVerified: false, // was true before — see note below
-  };
-}
-
-function createLocalAuthResult(user: LocalAuthUser) {
-  const normalizedUser: User = {
-    id: user.id,
-    name: user.name,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    nickname: user.nickname,
-    email: user.email,
-    phoneNumber: user.phoneNumber,
-    dateOfBirth: user.dateOfBirth,
-    gender: user.gender,
-    role: user.role,
-    avatar: user.avatar,
-    walletBalance: user.walletBalance,
-    totalEarned: user.totalEarned,
-    totalSpent: user.totalSpent,
-    tasksCompleted: user.tasksCompleted,
-    tasksPosted: user.tasksPosted,
-    isEmailVerified: user.isEmailVerified,
-    taskQualityScore: 100,
-    currentStreak: 0,
-    longestStreak: 0,
-    referralsCount: 0,
-    referralEarnings: 0,
-    referralLevel: 1,
-    theme: "light",
-  };
-
-  return {
-    user: normalizedUser,
-    token: `local-token-${user.id}`,
-    refreshToken: `local-refresh-${user.id}`,
-  };
-}
-
-function loginLocalAuthUser(email: string, password: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const users = ensureDemoAuthUsers();
-  const match = users.find(
-    (user) =>
-      user.email.toLowerCase() === normalizedEmail &&
-      user.password === password,
-  );
-
-  if (!match) return null;
-  return createLocalAuthResult(match);
-}
-
-function registerLocalAuthUser(payload: {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  role: Role;
-  phoneNumber: string;
-  dateOfBirth: string;
-  gender: string;
-}) {
-  const normalizedEmail = payload.email.trim().toLowerCase();
-  const users = ensureDemoAuthUsers();
-  const exists = users.some(
-    (user) => user.email.toLowerCase() === normalizedEmail,
-  );
-
-  if (exists) {
-    throw new Error("An account with this email already exists.");
-  }
-
-  const newUser = buildLocalAuthUser(payload);
-  users.push(newUser);
-  writeLocalAuthUsers(users);
-  return createLocalAuthResult(newUser);
-}
 
 function normalizeRole(value: unknown, fallback: Role = "earner"): Role {
   if (value === "advertiser" || value === "earner" || value === "admin") {
@@ -668,50 +440,52 @@ export const cocobaseAuth = {
         response.data,
         fallbackRole,
       );
-      if (!user) throw new Error("Unable to sign in");
+      if (!user) throw new Error("Unable to sign in. Please try again.");
       return {
         user,
         token: token ?? "backend_token",
         refreshToken: refreshToken ?? "backend_refresh",
       };
     } catch (error) {
-      const localResult = registerLocalAuthUser({
-        firstName: "Google",
-        lastName: "User",
-        email: `google-${Date.now()}@local.dev`,
-        password: `google-${Date.now()}`,
-        role: fallbackRole,
-        phoneNumber: "",
-        dateOfBirth: "",
-        gender: "",
-      });
-      return localResult;
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in. Please try again.";
+      throw new Error(
+        message.includes("Unable to sign in")
+          ? message
+          : "Unable to sign in. Please try again.",
+      );
     }
   },
 
   async login(email: string, password: string) {
-    if (!env.IS_MOCK) {
-      try {
-        const response = await authAPI.login({ email, password });
-        const { user, token, refreshToken } = normalizeAuthResult(
-          response.data,
-          "earner",
-        );
-        if (user) {
-          return {
-            user,
-            token: token ?? "backend_token",
-            refreshToken: refreshToken ?? "backend_refresh",
-          };
-        }
-      } catch (error) {
-        console.warn("Backend login failed; falling back to local", error);
+    try {
+      const response = await authAPI.login({ email, password });
+      const { user, token, refreshToken } = normalizeAuthResult(
+        response.data,
+        "earner",
+      );
+      if (!user) {
+        throw new Error("Unable to sign in. Please try again.");
       }
-    }
 
-    const localResult = loginLocalAuthUser(email, password);
-    if (localResult) return localResult;
-    throw new Error("Incorrect email or password.");
+      return {
+        user,
+        token: token ?? "backend_token",
+        refreshToken: refreshToken ?? "backend_refresh",
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in. Please try again.";
+      throw new Error(
+        message.includes("Unable to sign in")
+          ? message
+          : "Unable to sign in. Please try again.",
+      );
+    }
   },
 
   async register(payload: {
@@ -749,7 +523,8 @@ export const cocobaseAuth = {
           (result as unknown as AppUser);
         const user = normalizeUser(rawUser, payload.role);
 
-        if (!user) throw new Error("Unable to create account");
+        if (!user)
+          throw new Error("Unable to create account. Please try again.");
 
         return {
           user,
@@ -757,15 +532,15 @@ export const cocobaseAuth = {
           refreshToken: "cocobase_refresh",
         };
       } catch (error) {
-        console.warn(
-          "Cocobase auth.register failed; using local fallback",
-          error,
-        );
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to create account. Please try again.";
+        throw new Error(message);
       }
     }
 
-    // Local fallback — offline/demo mode only.
-    return registerLocalAuthUser(payload);
+    throw new Error("Unable to create account. Please try again.");
   },
 
   async getCurrentUser() {
@@ -1293,6 +1068,55 @@ export const cocobaseSubmissions = {
 };
 
 export const cocobaseWallet = {
+  async verifyDeposit(
+    reference: string,
+    amount: number,
+    userId?: string,
+    delta?: number,
+    description?: string,
+  ) {
+    const response = await fetch("/api/wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference, amount, userId, delta, description }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(payload.error || "Unable to verify payment.");
+    }
+
+    return response.json();
+  },
+
+  async reconcileWallet(userId: string, delta: number, description: string) {
+    const response = await fetch("/api/wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        delta,
+        description,
+        type: delta >= 0 ? "deposit" : "task_payment",
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(payload.error || "Unable to reconcile wallet balance.");
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      walletBalance?: number;
+    };
+
+    return payload.walletBalance ?? 0;
+  },
+
   async listTransactions(userId?: string) {
     if (!cocobaseClient) return [];
 
