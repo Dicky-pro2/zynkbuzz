@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="128" viewBox="0 0 512 128">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#14D399"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="128" fill="none"/>
+  <g transform="translate(20,20)">
+    <rect x="0" y="0" rx="22" ry="22" width="88" height="88" fill="#101B3A" stroke="url(#g1)" stroke-width="3"/>
+    <path d="M22 56 L42 36 L58 52 L72 36" fill="none" stroke="url(#g1)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64" cy="64" r="14" fill="#14D399"/>
+    <text x="64" y="69" font-size="14" text-anchor="middle" fill="white" font-family="Arial">₦</text>
+  </g>
+  <text x="130" y="78" font-size="54" font-weight="700" font-family="Arial, sans-serif" fill="#ffffff">Engage<tspan fill="url(#g1)">Pay</tspan></text>
+</svg>

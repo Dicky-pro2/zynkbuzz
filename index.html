@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/Zynk_Favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zynk — Real Social Media Engagement</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              navy: { DEFAULT: "var(--bg-primary)", 2: "var(--bg-secondary)" },
+              card: "var(--card-bg)",
+              border: "var(--border-color)",
+              violet: {
+                DEFAULT: "var(--accent-color)",
+                light: "#A78BFA",
+                dark: "#6D28D9",
+              },
+              slatec: "var(--text-secondary)",
+              emerald2: {
+                DEFAULT: "var(--success-color)",
+                dim: "rgba(16,185,129,0.15)",
+              },
+            },
+            fontFamily: {
+              sora: ["Sora", "sans-serif"],
+              inter: ["Inter", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
