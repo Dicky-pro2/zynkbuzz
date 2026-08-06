@@ -1,5 +1,9 @@
 import { Cocobase, type AppUser, type Document } from "cocobase";
 import env from "../config/env";
+<<<<<<< HEAD
+=======
+import { authAPI } from "./api";
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
 import type {
   Notification,
   Role,
@@ -173,6 +177,171 @@ function normalizeTask(document: Document<Record<string, unknown>>): Task {
   };
 }
 
+<<<<<<< HEAD
+=======
+function normalizeBackendUser(
+  payload: unknown,
+  fallbackRole: Role = "earner",
+  fallbackName?: string,
+  fallbackNickname?: string,
+): User | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const directData = payload as Record<string, unknown>;
+  const nestedData = asRecord(directData.data);
+  const mergedData = { ...nestedData, ...directData } as Record<
+    string,
+    unknown
+  >;
+  const roleValues = Array.isArray(mergedData.roles)
+    ? (mergedData.roles as unknown[])
+    : [];
+  const role = normalizeRole(
+    pickFirstDefined(
+      mergedData.role,
+      mergedData.userRole,
+      roleValues[0],
+      mergedData.type,
+      directData.role,
+      directData.userRole,
+      directData.type,
+    ),
+    fallbackRole,
+  );
+
+  const firstName = pickFirstDefined(
+    asString(mergedData.firstName),
+    asString(nestedData.firstName),
+    asString(mergedData.name),
+    asString(nestedData.name),
+    asString(mergedData.fullName),
+    asString(nestedData.fullName),
+    asString(mergedData.displayName),
+    asString(nestedData.displayName),
+    asString(mergedData.username),
+    asString(nestedData.username),
+    fallbackName,
+  );
+  const lastName = pickFirstDefined(
+    asString(mergedData.lastName),
+    asString(nestedData.lastName),
+  );
+  const fullName = firstName
+    ? [firstName, lastName].filter(Boolean).join(" ").trim()
+    : undefined;
+
+  return {
+    id:
+      asString(
+        pickFirstDefined(
+          mergedData.id,
+          mergedData._id,
+          mergedData.userId,
+          mergedData.uuid,
+        ),
+      ) ?? `user-${Date.now()}`,
+    name:
+      fullName ??
+      pickFirstDefined(
+        asString(mergedData.name),
+        asString(mergedData.fullName),
+        asString(mergedData.displayName),
+        asString(mergedData.username),
+        asString(mergedData.email)?.split("@")[0],
+        fallbackName,
+      ) ??
+      "User",
+    firstName: asString(firstName) ?? "",
+    lastName: asString(lastName) ?? "",
+    nickname:
+      pickFirstDefined(
+        asString(mergedData.nickname),
+        asString(mergedData.nickName),
+        asString(mergedData.username),
+        fallbackNickname,
+      ) ?? null,
+    email:
+      pickFirstDefined(
+        asString(mergedData.email),
+        asString(mergedData.username),
+      ) ?? "",
+    role,
+    avatar:
+      pickFirstDefined(
+        asString(mergedData.avatar),
+        asString(mergedData.profilePicture),
+      ) ?? null,
+    phoneNumber: asString(mergedData.phoneNumber) ?? "",
+    dateOfBirth: asString(mergedData.dateOfBirth) ?? "",
+    gender: asString(mergedData.gender) ?? "",
+    walletBalance: asNumber(
+      pickFirstDefined(mergedData.walletBalance, mergedData.balance),
+    ),
+    totalEarned: asNumber(pickFirstDefined(mergedData.totalEarned)),
+    totalSpent: asNumber(pickFirstDefined(mergedData.totalSpent)),
+    tasksCompleted: asNumber(
+      pickFirstDefined(mergedData.tasksCompleted, mergedData.tasks_completed),
+    ),
+    tasksPosted: asNumber(
+      pickFirstDefined(mergedData.tasksPosted, mergedData.tasks_posted),
+    ),
+    isEmailVerified: asBoolean(
+      pickFirstDefined(
+        mergedData.isEmailVerified,
+        mergedData.emailVerified,
+        mergedData.verified,
+      ),
+      true,
+    ),
+    taskQualityScore:
+      asNumber(pickFirstDefined(mergedData.taskQualityScore)) || 100,
+    currentStreak: asNumber(pickFirstDefined(mergedData.currentStreak)) || 0,
+    longestStreak: asNumber(pickFirstDefined(mergedData.longestStreak)) || 0,
+    referralsCount: asNumber(pickFirstDefined(mergedData.referralsCount)) || 0,
+    referralEarnings:
+      asNumber(pickFirstDefined(mergedData.referralEarnings)) || 0,
+    referralLevel: asNumber(pickFirstDefined(mergedData.referralLevel)) || 1,
+    theme: (asString(pickFirstDefined(mergedData.theme)) ?? "light") as
+      | "light"
+      | "dark",
+  };
+}
+
+function normalizeAuthResult(
+  responseData: unknown,
+  fallbackRole: Role = "earner",
+  fallbackName?: string,
+  fallbackNickname?: string,
+) {
+  const root = asRecord(responseData);
+  const body = asRecord(root.data);
+  const nestedBody = asRecord(body.data);
+  const userPayload = body.user ?? nestedBody.user ?? body.profile ?? body;
+  const accessToken =
+    asString(body.accessToken) ??
+    asString(body.token) ??
+    asString(nestedBody.accessToken) ??
+    asString(nestedBody.token) ??
+    null;
+  const refreshToken =
+    asString(body.refreshToken) ??
+    asString(nestedBody.refreshToken) ??
+    asString(body.refresh_token) ??
+    null;
+
+  return {
+    user: normalizeBackendUser(
+      userPayload,
+      fallbackRole,
+      fallbackName,
+      fallbackNickname,
+    ),
+    token: accessToken,
+    refreshToken,
+  };
+}
+
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
 function normalizeAuthError(error: unknown): Error {
   if (error instanceof Error) {
     const message = error.message?.toLowerCase() ?? "";
@@ -271,6 +440,7 @@ async function requestCocobase(
 
 export const cocobaseAuth = {
   async googleLogin(idToken: string, fallbackRole: Role = "earner") {
+<<<<<<< HEAD
     if (!cocobaseClient) {
       throw new Error("Sign-in is not available right now.");
     }
@@ -284,17 +454,39 @@ export const cocobaseAuth = {
         user,
         token: cocobaseClient.auth.getToken() ?? "cocobase_token",
         refreshToken: "cocobase_refresh",
+=======
+    try {
+      const response = await authAPI.googleAuth(idToken, fallbackRole);
+      const { user, token, refreshToken } = normalizeAuthResult(
+        response.data,
+        fallbackRole,
+      );
+      if (!user) throw new Error("Unable to sign in. Please try again.");
+      return {
+        user,
+        token: token ?? "backend_token",
+        refreshToken: refreshToken ?? "backend_refresh",
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       };
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Unable to sign in. Please try again.";
+<<<<<<< HEAD
       throw new Error(message);
+=======
+      throw new Error(
+        message.includes("Unable to sign in")
+          ? message
+          : "Unable to sign in. Please try again.",
+      );
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     }
   },
 
   async login(email: string, password: string) {
+<<<<<<< HEAD
     if (!cocobaseClient) {
       throw new Error("Sign-in is not available right now.");
     }
@@ -311,15 +503,41 @@ export const cocobaseAuth = {
       const user = normalizeUser(result.user, "earner");
       if (!user) {
         throw new Error("Incorrect email or password.");
+=======
+    try {
+      const response = await authAPI.login({ email, password });
+      const { user, token, refreshToken } = normalizeAuthResult(
+        response.data,
+        "earner",
+      );
+      if (!user) {
+        throw new Error("Unable to sign in. Please try again.");
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       }
 
       return {
         user,
+<<<<<<< HEAD
         token: cocobaseClient.auth.getToken() ?? "cocobase_token",
         refreshToken: "cocobase_refresh",
       };
     } catch (error) {
       throw normalizeAuthError(error);
+=======
+        token: token ?? "backend_token",
+        refreshToken: refreshToken ?? "backend_refresh",
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in. Please try again.";
+      throw new Error(
+        message.includes("Unable to sign in")
+          ? message
+          : "Unable to sign in. Please try again.",
+      );
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     }
   },
 
@@ -412,6 +630,19 @@ export const cocobaseAuth = {
   },
 
   async forgotPassword(email: string) {
+<<<<<<< HEAD
+=======
+    try {
+      await authAPI.forgotPassword(email);
+      return true;
+    } catch (error) {
+      console.warn(
+        "Backend forgotPassword failed; trying Cocobase directly",
+        error,
+      );
+    }
+
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     if (cocobaseClient) {
       try {
         await cocobaseClient.auth.requestPasswordReset(email);
@@ -425,6 +656,7 @@ export const cocobaseAuth = {
     return true;
   },
 
+<<<<<<< HEAD
   // IMPORTANT: The installed Cocobase SDK only exposes
   // `requestPasswordReset(email)` — there is no confirm/complete method in
   // its type definitions. The endpoint this needs to call to actually SET
@@ -443,12 +675,18 @@ export const cocobaseAuth = {
         body: { token, password },
         useDataKey: false,
       });
+=======
+  async resetPassword(token: string, password: string) {
+    try {
+      await authAPI.resetPassword(token, password);
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       return true;
     } catch (error) {
       throw normalizeAuthError(error);
     }
   },
 
+<<<<<<< HEAD
   // Note: Cocobase's updateUser() sets a new password based on the CURRENT
   // authenticated session (there is no server-side check of the old
   // password in this SDK call) — the "current password" field in the UI
@@ -459,6 +697,11 @@ export const cocobaseAuth = {
     }
     try {
       await cocobaseClient.auth.updateUser({ password: newPassword });
+=======
+  async changePassword(currentPassword: string, newPassword: string) {
+    try {
+      await authAPI.changePassword({ currentPassword, newPassword });
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       return true;
     } catch (error) {
       const message =

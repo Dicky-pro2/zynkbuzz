@@ -25,6 +25,10 @@ import Leaderboard from "./pages/Leaderboard";
 import WithdrawalHistory from "./pages/WithdrawalHistory";
 import AdvertiserAnalytics from "./pages/AdvertiserAnalytics";
 import { useAuthStore } from "./store/authStore";
+<<<<<<< HEAD
+=======
+import { ThemeProvider } from "./context/ThemeContext";
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
 import ResetPassword from "./pages/ResetPassword";
 import "./styles/theme.css";
 
@@ -37,6 +41,7 @@ export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   return (
+<<<<<<< HEAD
     <BrowserRouter>
       <Toaster />
       <Routes>
@@ -46,6 +51,18 @@ export default function App() {
           element={
             isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />
           }
+=======
+    <ThemeProvider>
+      <BrowserRouter>
+        <Toaster />
+        <Routes>
+          {/* Public */}
+          <Route
+            path="/"
+            element={
+              isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />
+            }
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
           />
           <Route
             path="/login"
@@ -204,9 +221,17 @@ export default function App() {
             </Route>
           </Route>
 
+<<<<<<< HEAD
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
+=======
+          {/* 404 */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
   );
 }

@@ -97,7 +97,10 @@ export default async function handler(
     delta?: number;
     description?: string;
     type?: string;
+<<<<<<< HEAD
     accessToken?: string;
+=======
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
   };
 
   if (!body.reference) {
@@ -112,12 +115,15 @@ export default async function handler(
     );
 
     if (body.userId && typeof body.delta === "number") {
+<<<<<<< HEAD
       if (!body.accessToken) {
         throw new Error(
           "Missing access token — cannot verify which user to credit.",
         );
       }
 
+=======
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       const { apiKey, projectId, baseURL } = getCocobaseConfig();
       if (!apiKey || !projectId) {
         throw new Error(
@@ -133,6 +139,7 @@ export default async function handler(
         timeout: 60000,
       });
 
+<<<<<<< HEAD
       // Scope this client instance to the requesting user's own session —
       // this is what makes it safe to call getCurrentUser()/updateUser()
       // here: without this, there is no session at all, and updateUser()
@@ -148,6 +155,12 @@ export default async function handler(
       }
 
       const currentBalance = Number(currentUser?.data?.walletBalance ?? 0);
+=======
+      const currentUser = await client.auth.getCurrentUser();
+      const currentBalance = Number(
+        currentUser?.data?.walletBalance ?? currentUser?.balance ?? 0,
+      );
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       const nextBalance = Math.max(0, currentBalance + body.delta);
       await client.auth.updateUser({
         data: {

@@ -48,9 +48,15 @@ if (env.IS_PROD && !env.IS_MOCK) {
   const missing = required.filter((key) => !import.meta.env[key]);
 
   if (missing.length > 0) {
+<<<<<<< HEAD
     console.error(
       `Missing required environment variables in production: ${missing.join(", ")}. Some features may not work correctly.`,
     );
+=======
+    const message = `Missing required environment variables in production: ${missing.join(", ")}`;
+    console.error(message);
+    throw new Error(message);
+>>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
   }
 }
 
