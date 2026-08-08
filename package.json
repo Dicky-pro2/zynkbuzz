@@ -10,10 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@tailwindcss/vite": "^4.3.3",
-=======
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     "axios": "^1.17.0",
     "cocobase": "^1.6.0",
     "framer-motion": "^12.40.0",
@@ -23,10 +20,7 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.17.0",
     "simple-icons": "^16.24.0",
-<<<<<<< HEAD
     "tailwindcss": "^4.3.3",
-=======
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     "zustand": "^5.0.14"
   },
   "devDependencies": {
