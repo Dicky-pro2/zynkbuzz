@@ -1,22 +1,14 @@
 import { defineConfig } from "vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
-<<<<<<< HEAD
 import tailwindcss from "@tailwindcss/vite";
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
   ],
-=======
-
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
   server: {
     proxy: {
       "/proxy/cocobase": {

@@ -22,14 +22,9 @@ const filters: {
 ];
 
 export default function AdvertiserTasks() {
-  const { user, updateWallet } = useAuthStore();
-  const {
-    myTasks,
-    updateTaskStatus,
-    pushActivity,
-    addTransaction,
-    addNotification,
-  } = useAppStore();
+  const { user } = useAuthStore();
+  const { myTasks, updateTaskStatus, pushActivity, addNotification } =
+    useAppStore();
   const [filter, setFilter] = useState<FilterType>("all");
 
   const filteredTasks = useMemo(() => {
@@ -55,17 +50,10 @@ export default function AdvertiserTasks() {
     if (status === "cancelled" && task.status !== "cancelled") {
       const refund = task.slotsLeft * task.reward;
       if (refund > 0) {
-        // Server-side wallet reconciliation is handled by the backend mutation endpoint.
-        updateWallet(user.walletBalance + refund);
         pushActivity(
           `Task cancelled — ${refund.toLocaleString()} coins refunded`,
           "green",
         );
-        addTransaction({
-          type: "refund",
-          amount: refund,
-          description: `Refund for cancelled task: ${task.taskType} on ${task.platform}`,
-        });
         addNotification({
           type: "task_approved",
           title: "Task Cancelled",

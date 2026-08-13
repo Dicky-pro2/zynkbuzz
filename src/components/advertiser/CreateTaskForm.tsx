@@ -34,9 +34,8 @@ const TASK_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function CreateTaskForm() {
-  const { user, updateWallet } = useAuthStore();
-  const { addTask, pushActivity, addTransaction, addNotification } =
-    useAppStore();
+  const { user } = useAuthStore();
+  const { addTask, pushActivity, addNotification } = useAppStore();
 
   const [platform, setPlatform] = useState<string>(PLATFORM_OPTIONS[0]);
   const [taskType, setTaskType] = useState<string>(TASK_TYPE_OPTIONS[0]);
@@ -91,17 +90,10 @@ export default function CreateTaskForm() {
       }
 
       addTask(createdTask);
-      // Server-side wallet reconciliation is handled by the backend mutation endpoint.
-      updateWallet(user.walletBalance - totalCost);
       pushActivity(
         `New task posted: ${taskType} on ${platform} · ${reward} coins x${slots}`,
         "violet",
       );
-      addTransaction({
-        type: "task_payment",
-        amount: -totalCost,
-        description: `Task posted: ${taskType} on ${platform}`,
-      });
       addNotification({
         type: "new_task",
         title: "Task Posted!",

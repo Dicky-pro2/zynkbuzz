@@ -48,19 +48,23 @@ export const useAuthStore = create<AuthState>()(
 
           return {
             user: nextUser,
-            accessToken,
-            refreshToken,
+            accessToken: accessToken || null,
+            refreshToken: refreshToken || null,
             isAuthenticated: true,
           };
         }),
 
       setTokens: (accessToken, refreshToken) =>
-        set({ accessToken, refreshToken, isAuthenticated: true }),
+        set({
+          accessToken: accessToken || null,
+          refreshToken: refreshToken || null,
+          isAuthenticated: true,
+        }),
 
       updateWallet: (newBalance) =>
         set((state) => ({
           user: state.user
-            ? { ...state.user, walletBalance: newBalance }
+            ? { ...state.user, walletBalance: Math.max(0, newBalance) }
             : state.user,
         })),
 
@@ -132,8 +136,6 @@ export const useAuthStore = create<AuthState>()(
       name: "zynk-auth",
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {

@@ -11,6 +11,24 @@ export default function DashboardLayout() {
   const isAdvertiser = user?.role === "advertiser";
   const isAdmin = user?.role === "admin";
 
+  const getInitials = () => {
+    const baseName = user?.name?.trim() || "";
+    const first = user?.firstName?.trim() || "";
+    const last = user?.lastName?.trim() || "";
+
+    const source = baseName || `${first} ${last}`.trim();
+    if (!source) return "U";
+
+    return (
+      source
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? "")
+        .join("") || "U"
+    );
+  };
+
   const handleLogout = () => {
     logout();
     notify.info("Logged out successfully");
@@ -61,7 +79,6 @@ export default function DashboardLayout() {
       : []),
   ];
 
-  
   return (
     <div className="min-h-screen bg-navy">
       <nav className="sticky top-0 z-50 backdrop-blur-md bg-navy/90 border-b border-border">
@@ -92,7 +109,6 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            
             <div
               className={`hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border ${
                 isAdvertiser
@@ -116,7 +132,9 @@ export default function DashboardLayout() {
             </div>
 
             <div className="bg-card border border-border rounded-full px-3 sm:px-4 py-1.5 text-sm font-semibold flex items-center gap-1.5">
-              <span className="text-amber-400"><Icons.Coins /></span>
+              <span className="text-amber-400">
+                <Icons.Coins />
+              </span>
               <span>{(user?.walletBalance ?? 0).toLocaleString()}</span>
             </div>
 
@@ -126,14 +144,24 @@ export default function DashboardLayout() {
               to="/dashboard/profile"
               title="Profile"
               className={({ isActive }) =>
-                `border rounded-full p-1.5 sm:p-2 transition-all ${
+                `border rounded-full overflow-hidden transition-all ${
                   isActive
-                    ? "border-violet-light text-violet-light"
-                    : "border-border text-slatec hover:border-violet-light hover:text-white"
+                    ? "border-violet-light"
+                    : "border-border hover:border-violet-light"
                 }`
               }
             >
-              <Icons.Profile size={16} />
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name || "Profile"}
+                  className="h-8 w-8 sm:h-10 sm:w-10 object-cover"
+                />
+              ) : (
+                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center bg-violet/15 text-xs font-bold text-violet-light">
+                  {getInitials()}
+                </div>
+              )}
             </NavLink>
 
             <button
@@ -178,7 +206,17 @@ export default function DashboardLayout() {
               }`
             }
           >
-            <Icons.Profile size={18} />
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt={user.name || "Profile"}
+                className="h-7 w-7 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet/15 text-[10px] font-bold text-violet-light">
+                {getInitials()}
+              </div>
+            )}
             Profile
           </NavLink>
         </div>

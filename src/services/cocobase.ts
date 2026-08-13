@@ -1,9 +1,6 @@
 import { Cocobase, type AppUser, type Document } from "cocobase";
 import env from "../config/env";
-<<<<<<< HEAD
-=======
-import { authAPI } from "./api";
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
+import { useAuthStore } from "../store/authStore";
 import type {
   Notification,
   Role,
@@ -177,171 +174,6 @@ function normalizeTask(document: Document<Record<string, unknown>>): Task {
   };
 }
 
-<<<<<<< HEAD
-=======
-function normalizeBackendUser(
-  payload: unknown,
-  fallbackRole: Role = "earner",
-  fallbackName?: string,
-  fallbackNickname?: string,
-): User | null {
-  if (!payload || typeof payload !== "object") return null;
-
-  const directData = payload as Record<string, unknown>;
-  const nestedData = asRecord(directData.data);
-  const mergedData = { ...nestedData, ...directData } as Record<
-    string,
-    unknown
-  >;
-  const roleValues = Array.isArray(mergedData.roles)
-    ? (mergedData.roles as unknown[])
-    : [];
-  const role = normalizeRole(
-    pickFirstDefined(
-      mergedData.role,
-      mergedData.userRole,
-      roleValues[0],
-      mergedData.type,
-      directData.role,
-      directData.userRole,
-      directData.type,
-    ),
-    fallbackRole,
-  );
-
-  const firstName = pickFirstDefined(
-    asString(mergedData.firstName),
-    asString(nestedData.firstName),
-    asString(mergedData.name),
-    asString(nestedData.name),
-    asString(mergedData.fullName),
-    asString(nestedData.fullName),
-    asString(mergedData.displayName),
-    asString(nestedData.displayName),
-    asString(mergedData.username),
-    asString(nestedData.username),
-    fallbackName,
-  );
-  const lastName = pickFirstDefined(
-    asString(mergedData.lastName),
-    asString(nestedData.lastName),
-  );
-  const fullName = firstName
-    ? [firstName, lastName].filter(Boolean).join(" ").trim()
-    : undefined;
-
-  return {
-    id:
-      asString(
-        pickFirstDefined(
-          mergedData.id,
-          mergedData._id,
-          mergedData.userId,
-          mergedData.uuid,
-        ),
-      ) ?? `user-${Date.now()}`,
-    name:
-      fullName ??
-      pickFirstDefined(
-        asString(mergedData.name),
-        asString(mergedData.fullName),
-        asString(mergedData.displayName),
-        asString(mergedData.username),
-        asString(mergedData.email)?.split("@")[0],
-        fallbackName,
-      ) ??
-      "User",
-    firstName: asString(firstName) ?? "",
-    lastName: asString(lastName) ?? "",
-    nickname:
-      pickFirstDefined(
-        asString(mergedData.nickname),
-        asString(mergedData.nickName),
-        asString(mergedData.username),
-        fallbackNickname,
-      ) ?? null,
-    email:
-      pickFirstDefined(
-        asString(mergedData.email),
-        asString(mergedData.username),
-      ) ?? "",
-    role,
-    avatar:
-      pickFirstDefined(
-        asString(mergedData.avatar),
-        asString(mergedData.profilePicture),
-      ) ?? null,
-    phoneNumber: asString(mergedData.phoneNumber) ?? "",
-    dateOfBirth: asString(mergedData.dateOfBirth) ?? "",
-    gender: asString(mergedData.gender) ?? "",
-    walletBalance: asNumber(
-      pickFirstDefined(mergedData.walletBalance, mergedData.balance),
-    ),
-    totalEarned: asNumber(pickFirstDefined(mergedData.totalEarned)),
-    totalSpent: asNumber(pickFirstDefined(mergedData.totalSpent)),
-    tasksCompleted: asNumber(
-      pickFirstDefined(mergedData.tasksCompleted, mergedData.tasks_completed),
-    ),
-    tasksPosted: asNumber(
-      pickFirstDefined(mergedData.tasksPosted, mergedData.tasks_posted),
-    ),
-    isEmailVerified: asBoolean(
-      pickFirstDefined(
-        mergedData.isEmailVerified,
-        mergedData.emailVerified,
-        mergedData.verified,
-      ),
-      true,
-    ),
-    taskQualityScore:
-      asNumber(pickFirstDefined(mergedData.taskQualityScore)) || 100,
-    currentStreak: asNumber(pickFirstDefined(mergedData.currentStreak)) || 0,
-    longestStreak: asNumber(pickFirstDefined(mergedData.longestStreak)) || 0,
-    referralsCount: asNumber(pickFirstDefined(mergedData.referralsCount)) || 0,
-    referralEarnings:
-      asNumber(pickFirstDefined(mergedData.referralEarnings)) || 0,
-    referralLevel: asNumber(pickFirstDefined(mergedData.referralLevel)) || 1,
-    theme: (asString(pickFirstDefined(mergedData.theme)) ?? "light") as
-      | "light"
-      | "dark",
-  };
-}
-
-function normalizeAuthResult(
-  responseData: unknown,
-  fallbackRole: Role = "earner",
-  fallbackName?: string,
-  fallbackNickname?: string,
-) {
-  const root = asRecord(responseData);
-  const body = asRecord(root.data);
-  const nestedBody = asRecord(body.data);
-  const userPayload = body.user ?? nestedBody.user ?? body.profile ?? body;
-  const accessToken =
-    asString(body.accessToken) ??
-    asString(body.token) ??
-    asString(nestedBody.accessToken) ??
-    asString(nestedBody.token) ??
-    null;
-  const refreshToken =
-    asString(body.refreshToken) ??
-    asString(nestedBody.refreshToken) ??
-    asString(body.refresh_token) ??
-    null;
-
-  return {
-    user: normalizeBackendUser(
-      userPayload,
-      fallbackRole,
-      fallbackName,
-      fallbackNickname,
-    ),
-    token: accessToken,
-    refreshToken,
-  };
-}
-
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
 function normalizeAuthError(error: unknown): Error {
   if (error instanceof Error) {
     const message = error.message?.toLowerCase() ?? "";
@@ -440,53 +272,28 @@ async function requestCocobase(
 
 export const cocobaseAuth = {
   async googleLogin(idToken: string, fallbackRole: Role = "earner") {
-<<<<<<< HEAD
     if (!cocobaseClient) {
       throw new Error("Sign-in is not available right now.");
     }
     try {
-      const appUser = await cocobaseClient.auth.loginWithGoogle({
-        idToken,
-      });
+      const appUser = await cocobaseClient.auth.loginWithGoogle({ idToken });
       const user = normalizeUser(appUser, fallbackRole);
       if (!user) throw new Error("Unable to sign in. Please try again.");
       return {
         user,
         token: cocobaseClient.auth.getToken() ?? "cocobase_token",
         refreshToken: "cocobase_refresh",
-=======
-    try {
-      const response = await authAPI.googleAuth(idToken, fallbackRole);
-      const { user, token, refreshToken } = normalizeAuthResult(
-        response.data,
-        fallbackRole,
-      );
-      if (!user) throw new Error("Unable to sign in. Please try again.");
-      return {
-        user,
-        token: token ?? "backend_token",
-        refreshToken: refreshToken ?? "backend_refresh",
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       };
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Unable to sign in. Please try again.";
-<<<<<<< HEAD
       throw new Error(message);
-=======
-      throw new Error(
-        message.includes("Unable to sign in")
-          ? message
-          : "Unable to sign in. Please try again.",
-      );
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     }
   },
 
   async login(email: string, password: string) {
-<<<<<<< HEAD
     if (!cocobaseClient) {
       throw new Error("Sign-in is not available right now.");
     }
@@ -503,41 +310,15 @@ export const cocobaseAuth = {
       const user = normalizeUser(result.user, "earner");
       if (!user) {
         throw new Error("Incorrect email or password.");
-=======
-    try {
-      const response = await authAPI.login({ email, password });
-      const { user, token, refreshToken } = normalizeAuthResult(
-        response.data,
-        "earner",
-      );
-      if (!user) {
-        throw new Error("Unable to sign in. Please try again.");
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       }
 
       return {
         user,
-<<<<<<< HEAD
         token: cocobaseClient.auth.getToken() ?? "cocobase_token",
         refreshToken: "cocobase_refresh",
       };
     } catch (error) {
       throw normalizeAuthError(error);
-=======
-        token: token ?? "backend_token",
-        refreshToken: refreshToken ?? "backend_refresh",
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to sign in. Please try again.";
-      throw new Error(
-        message.includes("Unable to sign in")
-          ? message
-          : "Unable to sign in. Please try again.",
-      );
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     }
   },
 
@@ -602,47 +383,67 @@ export const cocobaseAuth = {
     return normalizeUser(user, "earner");
   },
 
+  // These three call our own Vercel serverless functions (api/send-verification.ts,
+  // api/verify-email.ts), which generate/validate our own token and send the
+  // email via Resend — bypassing Cocobase's built-in (currently broken) SMTP.
   async requestEmailVerification() {
-    await requestCocobase("/auth-collections/verify-email/send", {
-      method: "POST",
-      body: {},
-      useDataKey: false,
-    });
-    return true;
-  },
+    const user = useAuthStore.getState().user;
+    if (!user) throw new Error("You must be signed in to verify your email.");
 
-  async verifyEmail(token: string) {
-    await requestCocobase("/auth-collections/verify-email/verify", {
+    const response = await fetch("/api/send-verification", {
       method: "POST",
-      body: { token },
-      useDataKey: false,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      }),
     });
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail.error || "Unable to send verification email.");
+    }
     return true;
   },
 
   async resendVerificationEmail() {
-    await requestCocobase("/auth-collections/verify-email/resend", {
+    return this.requestEmailVerification();
+  },
+
+  async verifyEmail(token: string) {
+    const response = await fetch("/api/verify-email", {
       method: "POST",
-      body: {},
-      useDataKey: false,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
     });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.error || "Invalid or expired verification token");
+    }
+
+    // Only mark the account verified if this browser is currently logged in
+    // as the SAME user the token belongs to — we can't safely update a
+    // different user's record from here (see api/wallet.ts for why).
+    if (!cocobaseClient) {
+      throw new Error("Verification is not available right now.");
+    }
+    const currentUser = await cocobaseClient.auth.getCurrentUser();
+    if (currentUser.id !== result.userId) {
+      throw new Error(
+        "Please log in with the account you're verifying, then try this link again.",
+      );
+    }
+
+    await cocobaseClient.auth.updateUser({
+      data: { isEmailVerified: true },
+    });
+
     return true;
   },
 
   async forgotPassword(email: string) {
-<<<<<<< HEAD
-=======
-    try {
-      await authAPI.forgotPassword(email);
-      return true;
-    } catch (error) {
-      console.warn(
-        "Backend forgotPassword failed; trying Cocobase directly",
-        error,
-      );
-    }
-
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
     if (cocobaseClient) {
       try {
         await cocobaseClient.auth.requestPasswordReset(email);
@@ -656,7 +457,6 @@ export const cocobaseAuth = {
     return true;
   },
 
-<<<<<<< HEAD
   // IMPORTANT: The installed Cocobase SDK only exposes
   // `requestPasswordReset(email)` — there is no confirm/complete method in
   // its type definitions. The endpoint this needs to call to actually SET
@@ -675,18 +475,12 @@ export const cocobaseAuth = {
         body: { token, password },
         useDataKey: false,
       });
-=======
-  async resetPassword(token: string, password: string) {
-    try {
-      await authAPI.resetPassword(token, password);
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       return true;
     } catch (error) {
       throw normalizeAuthError(error);
     }
   },
 
-<<<<<<< HEAD
   // Note: Cocobase's updateUser() sets a new password based on the CURRENT
   // authenticated session (there is no server-side check of the old
   // password in this SDK call) — the "current password" field in the UI
@@ -697,11 +491,6 @@ export const cocobaseAuth = {
     }
     try {
       await cocobaseClient.auth.updateUser({ password: newPassword });
-=======
-  async changePassword(currentPassword: string, newPassword: string) {
-    try {
-      await authAPI.changePassword({ currentPassword, newPassword });
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
       return true;
     } catch (error) {
       const message =
@@ -710,29 +499,6 @@ export const cocobaseAuth = {
     }
   },
 };
-
-function readStoredCollection<T>(storageKey: string): T[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as T[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredCollection<T>(storageKey: string, items: T[]) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(items));
-  } catch {
-    // Ignore storage issues and continue with in-memory fallback.
-  }
-}
 
 function normalizeTransaction(
   document: Document<Record<string, unknown>>,
@@ -814,16 +580,6 @@ function readAvatarUrlFromPayload(payload: unknown): string | null {
       ),
     ) ?? null
   );
-}
-
-function toDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("Failed to read image"));
-    reader.readAsDataURL(file);
-  });
 }
 
 function normalizeAdminUser(appUser: AppUser) {
@@ -994,77 +750,27 @@ export const cocobaseProfile = {
     };
 
     if (!cocobaseClient) {
-      const existing =
-        readStoredCollection<Record<string, unknown>>("zynk-profiles");
-      const next = [
-        ...existing.filter(
-          (item) => (item.userId as string | undefined) !== userId,
-        ),
-        { id: `local-profile-${userId}`, ...payload },
-      ];
-      writeStoredCollection("zynk-profiles", next);
-      return { id: `local-profile-${userId}`, ...payload };
+      throw new Error("Profile updates are not available right now.");
     }
 
-    try {
-      const document = await cocobaseClient.createDocument("profiles", payload);
-      return { id: document.id, ...payload };
-    } catch (error) {
-      console.warn(
-        "Cocobase profile update failed; using local fallback",
-        error,
-      );
-      const existing =
-        readStoredCollection<Record<string, unknown>>("zynk-profiles");
-      const next = [
-        ...existing.filter(
-          (item) => (item.userId as string | undefined) !== userId,
-        ),
-        { id: `local-profile-${userId}`, ...payload },
-      ];
-      writeStoredCollection("zynk-profiles", next);
-      return { id: `local-profile-${userId}`, ...payload };
-    }
+    const document = await cocobaseClient.createDocument("profiles", payload);
+    return { id: document.id, ...payload };
   },
 
-  async uploadAvatar(userId: string, file: File) {
-    const localFallback = async () => {
-      const avatarUrl = await toDataUrl(file);
-      const existing =
-        readStoredCollection<Record<string, unknown>>("zynk-profiles");
-      const next = [
-        ...existing.filter(
-          (item) => (item.userId as string | undefined) !== userId,
-        ),
-        {
-          id: `local-profile-${userId}`,
-          userId,
-          avatar: avatarUrl,
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-      writeStoredCollection("zynk-profiles", next);
-      return avatarUrl;
-    };
-
+  async uploadAvatar(_userId: string, file: File) {
     if (!cocobaseClient) {
-      return localFallback();
+      throw new Error("Avatar upload is not available right now.");
     }
 
-    try {
-      const response = await cocobaseClient.auth.updateUserWithFiles({
-        data: { updatedAt: new Date().toISOString() },
-        files: { avatar: file },
-      });
-      const avatarUrl = readAvatarUrlFromPayload(response);
-      if (avatarUrl) {
-        return avatarUrl;
-      }
-      return localFallback();
-    } catch (error) {
-      console.warn("Cocobase avatar upload failed; using local preview", error);
-      return localFallback();
+    const response = await cocobaseClient.auth.updateUserWithFiles({
+      data: { updatedAt: new Date().toISOString() },
+      files: { avatar: file },
+    });
+    const avatarUrl = readAvatarUrlFromPayload(response);
+    if (avatarUrl) {
+      return avatarUrl;
     }
+    throw new Error("Avatar upload did not return a usable URL.");
   },
 };
 
@@ -1087,36 +793,14 @@ export const cocobaseSubmissions = {
     };
 
     if (!cocobaseClient) {
-      const existing =
-        readStoredCollection<Record<string, unknown>>("zynk-submissions");
-      const nextItem = {
-        id: `local-submission-${Date.now()}`,
-        ...submissionPayload,
-      };
-      writeStoredCollection("zynk-submissions", [nextItem, ...existing]);
-      return nextItem;
+      throw new Error("Submission service is not configured.");
     }
 
-    try {
-      const document = await cocobaseClient.createDocument(
-        "submissions",
-        submissionPayload,
-      );
-      return { id: document.id, ...submissionPayload };
-    } catch (error) {
-      console.warn(
-        "Cocobase submission save failed; using local fallback",
-        error,
-      );
-      const existing =
-        readStoredCollection<Record<string, unknown>>("zynk-submissions");
-      const nextItem = {
-        id: `local-submission-${Date.now()}`,
-        ...submissionPayload,
-      };
-      writeStoredCollection("zynk-submissions", [nextItem, ...existing]);
-      return nextItem;
-    }
+    const document = await cocobaseClient.createDocument(
+      "submissions",
+      submissionPayload,
+    );
+    return { id: document.id, ...submissionPayload };
   },
 
   async review(payload: {
@@ -1131,29 +815,14 @@ export const cocobaseSubmissions = {
     };
 
     if (!cocobaseClient) {
-      const existing = readStoredCollection<Record<string, unknown>>(
-        "zynk-submission-reviews",
-      );
-      const nextItem = { id: `local-review-${Date.now()}`, ...reviewPayload };
-      writeStoredCollection("zynk-submission-reviews", [nextItem, ...existing]);
-      return nextItem;
+      throw new Error("Submission review service is not configured.");
     }
 
-    try {
-      const document = await cocobaseClient.createDocument(
-        "submission_reviews",
-        reviewPayload,
-      );
-      return { id: document.id, ...reviewPayload };
-    } catch (error) {
-      console.warn("Cocobase review save failed; using local fallback", error);
-      const existing = readStoredCollection<Record<string, unknown>>(
-        "zynk-submission-reviews",
-      );
-      const nextItem = { id: `local-review-${Date.now()}`, ...reviewPayload };
-      writeStoredCollection("zynk-submission-reviews", [nextItem, ...existing]);
-      return nextItem;
-    }
+    const document = await cocobaseClient.createDocument(
+      "submission_reviews",
+      reviewPayload,
+    );
+    return { id: document.id, ...reviewPayload };
   },
 };
 
@@ -1165,10 +834,18 @@ export const cocobaseWallet = {
     delta?: number,
     description?: string,
   ) {
+    const accessToken = useAuthStore.getState().accessToken ?? undefined;
     const response = await fetch("/api/wallet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference, amount, userId, delta, description }),
+      body: JSON.stringify({
+        reference,
+        amount,
+        userId,
+        delta,
+        description,
+        accessToken,
+      }),
     });
 
     if (!response.ok) {
@@ -1182,6 +859,7 @@ export const cocobaseWallet = {
   },
 
   async reconcileWallet(userId: string, delta: number, description: string) {
+    const accessToken = useAuthStore.getState().accessToken ?? undefined;
     const response = await fetch("/api/wallet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1190,6 +868,7 @@ export const cocobaseWallet = {
         delta,
         description,
         type: delta >= 0 ? "deposit" : "task_payment",
+        accessToken,
       }),
     });
 
@@ -1243,25 +922,14 @@ export const cocobaseWallet = {
     };
 
     if (!cocobaseClient) {
-      return {
-        id: `local-transaction-${Date.now()}`,
-        ...transactionPayload,
-      } as Transaction;
+      throw new Error("Transaction logging is not configured.");
     }
 
-    try {
-      const document = await cocobaseClient.createDocument(
-        "transactions",
-        transactionPayload,
-      );
-      return normalizeTransaction(document);
-    } catch (error) {
-      console.warn("Failed to sync transaction to Cocobase", error);
-      return {
-        id: `local-transaction-${Date.now()}`,
-        ...transactionPayload,
-      } as Transaction;
-    }
+    const document = await cocobaseClient.createDocument(
+      "transactions",
+      transactionPayload,
+    );
+    return normalizeTransaction(document);
   },
 
   async listWithdrawals(userId?: string) {
@@ -1305,25 +973,14 @@ export const cocobaseWallet = {
     };
 
     if (!cocobaseClient) {
-      return {
-        id: `local-withdrawal-${Date.now()}`,
-        ...withdrawalPayload,
-      } as Withdrawal;
+      throw new Error("Withdrawal service is not configured.");
     }
 
-    try {
-      const document = await cocobaseClient.createDocument(
-        "withdrawals",
-        withdrawalPayload,
-      );
-      return normalizeWithdrawal(document);
-    } catch (error) {
-      console.warn("Failed to sync withdrawal to Cocobase", error);
-      return {
-        id: `local-withdrawal-${Date.now()}`,
-        ...withdrawalPayload,
-      } as Withdrawal;
-    }
+    const document = await cocobaseClient.createDocument(
+      "withdrawals",
+      withdrawalPayload,
+    );
+    return normalizeWithdrawal(document);
   },
 };
 

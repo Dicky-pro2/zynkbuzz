@@ -9,7 +9,6 @@ import type {
   Submission,
 } from "../types";
 import { useAuthStore } from "./authStore";
-import { useGamificationStore } from "./gamificationStore";
 import {
   cocobaseNotifications,
   cocobaseTasks,
@@ -57,9 +56,6 @@ interface AppState extends UserAppData {
   ) => void;
 }
 
-const STORAGE_PREFIX = "zynk-user-data:";
-const SHARED_TASKS_STORAGE_KEY = "zynk-shared-tasks";
-
 const defaultUserData = (): UserAppData => ({
   tasks: [],
   myTasks: [],
@@ -80,88 +76,18 @@ const defaultUserData = (): UserAppData => ({
   ],
 });
 
-// ── Persistence helpers ──
-function loadSharedTasks() {
-  try {
-    const raw = localStorage.getItem(SHARED_TASKS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<
-        Pick<UserAppData, "tasks" | "myTasks">
-      >;
-      return {
-        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-        myTasks: Array.isArray(parsed.myTasks) ? parsed.myTasks : [],
-      };
-    }
-  } catch {
-    // fall through to default
-  }
-
-  return { tasks: [] as Task[], myTasks: [] as Task[] };
-}
-
-function saveSharedTasks(data: Pick<UserAppData, "tasks" | "myTasks">) {
-  try {
-    localStorage.setItem(SHARED_TASKS_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // localStorage full or unavailable — fail silently for demo purposes
-  }
-}
-
 function loadFromStorage(userId: string): UserAppData {
-  const sharedTasks = loadSharedTasks();
-
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + userId);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<UserAppData>;
-      return {
-        ...defaultUserData(),
-        ...parsed,
-        tasks: sharedTasks.tasks,
-        myTasks: sharedTasks.myTasks,
-      };
-    }
-  } catch {
-    // fall through to default
-  }
-
-  return {
-    ...defaultUserData(),
-    tasks: sharedTasks.tasks,
-    myTasks: sharedTasks.myTasks,
-  };
+  void userId;
+  return { ...defaultUserData() };
 }
 
-function saveToStorage(userId: string | null, data: Partial<UserAppData>) {
-  if (!userId) return;
-  try {
-    localStorage.setItem(
-      STORAGE_PREFIX + userId,
-      JSON.stringify({
-        ...defaultUserData(),
-        ...data,
-        tasks: [],
-        myTasks: [],
-      }),
-    );
-  } catch {
-    // localStorage full or unavailable — fail silently for demo purposes
-  }
+function saveToStorage(_userId: string | null, _data: Partial<UserAppData>) {
+  return undefined;
 }
 
 export const useAppStore = create<AppState>((set, get) => {
   const persistCurrent = (partial: Partial<UserAppData>) => {
     set(partial);
-    const state = get();
-    saveSharedTasks({ tasks: state.tasks, myTasks: state.myTasks });
-    saveToStorage(state.currentUserId, {
-      activity: state.activity,
-      transactions: state.transactions,
-      withdrawals: state.withdrawals,
-      notifications: state.notifications,
-      submissions: state.submissions,
-    });
   };
 
   return {
@@ -373,17 +299,6 @@ export const useAppStore = create<AppState>((set, get) => {
           ...state.withdrawals,
         ],
       });
-
-      // Debit immediately — funds are locked while the withdrawal is pending.
-      // The authoritative balance change is persisted by the server-side mutation endpoint.
-      if (authState.user) {
-        authState.updateWallet(authState.user.walletBalance - w.amount);
-      }
-      get().addTransaction({
-        type: "withdrawal",
-        amount: -w.amount,
-        description: `Withdrawal via ${w.method}`,
-      });
     },
 
     addNotification: (n) => {
@@ -488,35 +403,12 @@ export const useAppStore = create<AppState>((set, get) => {
           });
       }
 
-      // Server-authoritative payout flow: approval hits the backend, which
-      // resolves the earner by id and credits their balance on record.
+      // The backend must own the reward credit. Client-side wallet mutation is
+      // intentionally removed here to avoid creating a fake money transaction.
       if (action === "approve" && submissionEntry && task?.reward) {
         const authState = useAuthStore.getState();
         if (authState.user && authState.user.id === submissionEntry.earnerId) {
-          const newStreak = authState.recordDailyActivity();
-          const bonusPercent = useGamificationStore
-            .getState()
-            .getStreakBonus(newStreak);
-          const bonusAmount =
-            Math.round(task.reward * (bonusPercent / 100) * 100) / 100;
-
-          authState.updateWallet(
-            authState.user.walletBalance + task.reward + bonusAmount,
-          );
-
-          get().addTransaction({
-            type: "task_earning",
-            amount: task.reward,
-            description: `Approved: ${task.taskType} on ${task.platform}`,
-          });
-
-          if (bonusAmount > 0) {
-            get().addTransaction({
-              type: "bonus",
-              amount: bonusAmount,
-              description: `${bonusPercent}% streak bonus (Day ${newStreak})`,
-            });
-          }
+          authState.recordDailyActivity();
         }
       }
     },

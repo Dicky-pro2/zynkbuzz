@@ -110,11 +110,10 @@ const tabs = [
 ];
 
 export default function EarnerWallet() {
-  const { user, updateWallet } = useAuthStore();
+  const { user } = useAuthStore();
   const {
     transactions,
     withdrawals,
-    addTransaction,
     addWithdrawal,
     pushActivity,
     addNotification,
@@ -178,13 +177,6 @@ export default function EarnerWallet() {
         accountDetails: formattedAccountDetails,
       });
 
-      // Server-side wallet reconciliation is handled by the backend mutation endpoint.
-      updateWallet(user.walletBalance - amt);
-      addTransaction({
-        type: "withdrawal",
-        amount: -amt,
-        description: `Withdrawal via ${methodLabel} (${fee.toLocaleString()} fee)`,
-      });
       addWithdrawal({
         amount: amt,
         method,

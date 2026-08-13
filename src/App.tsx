@@ -25,10 +25,7 @@ import Leaderboard from "./pages/Leaderboard";
 import WithdrawalHistory from "./pages/WithdrawalHistory";
 import AdvertiserAnalytics from "./pages/AdvertiserAnalytics";
 import { useAuthStore } from "./store/authStore";
-<<<<<<< HEAD
-=======
 import { ThemeProvider } from "./context/ThemeContext";
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
 import ResetPassword from "./pages/ResetPassword";
 import "./styles/theme.css";
 
@@ -37,21 +34,24 @@ function SafePage({ children }: { children: React.ReactNode }) {
   return <RouteErrorBoundary>{children}</RouteErrorBoundary>;
 }
 
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   return (
-<<<<<<< HEAD
-    <BrowserRouter>
-      <Toaster />
-      <Routes>
-        {/* Public */}
-        <Route
-          path="/"
-          element={
-            isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />
-          }
-=======
     <ThemeProvider>
       <BrowserRouter>
         <Toaster />
@@ -62,7 +62,6 @@ export default function App() {
             element={
               isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />
             }
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
           />
           <Route
             path="/login"
@@ -85,14 +84,10 @@ export default function App() {
             }
           />
           <Route
-          path="/reset-password"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/dashboard" />
-            ) : ( 
-              <ResetPassword />
-            )
-          }
+            path="/reset-password"
+            element={
+              isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
+            }
           />
 
           {/* Verification */}
@@ -189,9 +184,11 @@ export default function App() {
             <Route
               path="admin"
               element={
-                <SafePage>
-                  <AdminLayout />
-                </SafePage>
+                <RequireAdmin>
+                  <SafePage>
+                    <AdminLayout />
+                  </SafePage>
+                </RequireAdmin>
               }
             >
               <Route
@@ -221,17 +218,10 @@ export default function App() {
             </Route>
           </Route>
 
-<<<<<<< HEAD
-        {/* 404 */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
-=======
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
->>>>>>> f2cb66afc0104e3aa7bcb566d256b5fa9e791769
   );
 }
