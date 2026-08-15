@@ -302,8 +302,7 @@ export const cocobaseAuth = {
 
       if (result.requires_2fa) {
         throw new Error(
-          result.message ||
-            "Additional verification is required to sign in.",
+          result.message || "Additional verification is required to sign in.",
         );
       }
 
@@ -390,14 +389,18 @@ export const cocobaseAuth = {
     const user = useAuthStore.getState().user;
     if (!user) throw new Error("You must be signed in to verify your email.");
 
+    const token = cocobaseClient?.auth.getToken();
+    if (!token) {
+      throw new Error("Authentication token is not available.");
+    }
+
     const response = await fetch("/api/send-verification", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
     });
 
     if (!response.ok) {
@@ -423,22 +426,10 @@ export const cocobaseAuth = {
       throw new Error(result.error || "Invalid or expired verification token");
     }
 
-    // Only mark the account verified if this browser is currently logged in
-    // as the SAME user the token belongs to — we can't safely update a
-    // different user's record from here (see api/wallet.ts for why).
-    if (!cocobaseClient) {
-      throw new Error("Verification is not available right now.");
-    }
-    const currentUser = await cocobaseClient.auth.getCurrentUser();
-    if (currentUser.id !== result.userId) {
-      throw new Error(
-        "Please log in with the account you're verifying, then try this link again.",
-      );
-    }
-
-    await cocobaseClient.auth.updateUser({
-      data: { isEmailVerified: true },
-    });
+    // The server has already updated the user's email verification status.
+    // We don't need to call client.auth.updateUser() from the frontend.
+    // The frontend UI will be updated via the authStore.
+    // When the user logs in next or refreshes, they'll have isEmailVerified = true.
 
     return true;
   },

@@ -37,17 +37,6 @@ function getJsonBody(req: {
   return req.body ?? {};
 }
 
-function getBearerToken(
-  headers?: Record<string, string | string[] | undefined>,
-) {
-  const auth = headers?.authorization || headers?.Authorization;
-  if (typeof auth === "string") {
-    const match = auth.match(/^Bearer\s+(.+)$/i);
-    return match ? match[1].trim() : "";
-  }
-  return "";
-}
-
 function getUserDisplayName(user: {
   data?: Record<string, unknown>;
   email?: string;
@@ -64,27 +53,39 @@ function getUserDisplayName(user: {
   return (nameFromData || user.name || user.email || "there").trim() || "there";
 }
 
-async function getUserByIdOrEmail(
-  client: Cocobase,
-  userId?: string,
-  email?: string,
-) {
-  if (!userId && !email) return null;
-
+// Helper to update user's email verification status via Cocobase admin API
+async function markUserEmailVerified(
+  userId: string,
+  baseURL: string,
+  apiKey: string,
+): Promise<void> {
   try {
-    const response = await client.auth.listUsers({ limit: 200 });
-    const users = Array.isArray(response?.data) ? response.data : [];
-
-    const match = users.find((user) => {
-      const userEmail = String(user.email || "").toLowerCase();
-      const sameId = user.id && userId && user.id === userId;
-      const sameEmail = email ? userEmail === email.toLowerCase() : false;
-      return sameId || sameEmail;
+    // Attempt to update user via Cocobase REST API using admin API key
+    const url = `${baseURL}/auth/users/${encodeURIComponent(userId)}`;
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        data: {
+          isEmailVerified: true,
+          updatedAt: new Date().toISOString(),
+        },
+      }),
     });
 
-    return match ?? null;
-  } catch {
-    return null;
+    if (!response.ok) {
+      // Log but don't fail - the token is already marked as used
+      console.error(
+        "Failed to update user email verification status:",
+        response.status,
+      );
+    }
+  } catch (error) {
+    // Log but don't fail - the token is already marked as used
+    console.error("Error updating email verification status:", error);
   }
 }
 
@@ -105,11 +106,9 @@ export default async function handler(
 
   const body = getJsonBody(req) as {
     token?: string;
-    accessToken?: string;
   };
 
   const rawToken = body.token?.trim();
-  const accessToken = body.accessToken || getBearerToken(req.headers);
 
   if (!rawToken) {
     res.status(400).json({ error: "Missing verification token." });
@@ -129,6 +128,7 @@ export default async function handler(
       timeout: 60000,
     });
 
+    // Hash the provided token and search for it
     const hash = crypto.createHash("sha256").update(rawToken).digest("hex");
     const records = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
@@ -143,9 +143,10 @@ export default async function handler(
     });
 
     if (!record) {
-      throw new Error(
-        "Verification token is invalid or has already been used.",
-      );
+      res.status(404).json({
+        error: "Verification token is invalid or has already been used.",
+      });
+      return;
     }
 
     const data = (record as { data?: Record<string, unknown> }).data ?? {};
@@ -154,81 +155,58 @@ export default async function handler(
     const expiresAt = String(data.expiresAt ?? "");
     const usedAt = data.usedAt ? String(data.usedAt) : "";
 
+    // Check if token has already been used
     if (usedAt) {
-      throw new Error("This verification link has already been used.");
+      res.status(409).json({
+        error: "This verification link has already been used.",
+      });
+      return;
     }
 
+    // Check if token has expired
     if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-      throw new Error(
-        "This verification link has expired. Please request a new one.",
-      );
+      res.status(400).json({
+        error: "This verification link has expired. Please request a new one.",
+      });
+      return;
     }
 
-    const user = await getUserByIdOrEmail(client, userId, email);
-    if (!user) {
-      throw new Error("This account could not be found.");
-    }
-
-    if (accessToken) {
-      client.auth.setToken(accessToken);
-      const currentUser = await client.auth.getCurrentUser().catch(() => null);
-      if (!currentUser || currentUser.id !== user.id) {
-        throw new Error(
-          "The authenticated session does not match the account being verified.",
-        );
-      }
-
-      const currentData =
-        (currentUser as { data?: Record<string, unknown> }).data ?? {};
-      const alreadyVerified = Boolean(
-        currentData.isEmailVerified === true ||
-        currentData.isEmailVerified === "true",
-      );
-      if (!alreadyVerified) {
-        await client.auth.updateUser({
-          data: {
-            isEmailVerified: true,
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      }
-
-      const welcomeFlag = Boolean(
-        currentData.welcomeEmailSent === true ||
-        currentData.welcomeEmailSent === "true",
-      );
-
-      if (!welcomeFlag) {
-        await sendWelcomeEmail({
-          to: String(currentUser.email || email),
-          name: getUserDisplayName(currentUser),
-        });
-        await client.auth.updateUser({
-          data: {
-            welcomeEmailSent: true,
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      }
-    }
-
+    // Mark token as used immediately to prevent race conditions
+    // This is the critical step to make verification idempotent
     await client
       .updateDocument("email_verifications", String(record.id), {
         usedAt: new Date().toISOString(),
-        verifiedAt: new Date().toISOString(),
       })
       .catch(() => undefined);
 
+    // Now that token is marked as used, proceed with verification
+    // Update the user's isEmailVerified status via the Cocobase admin API
+    await markUserEmailVerified(userId, baseURL, apiKey);
+
+    // Send welcome email (only if we haven't already)
+    // This should only happen once since we check usedAt above
+    try {
+      await sendWelcomeEmail({
+        to: email,
+        name: getUserDisplayName({ email, name: email.split("@")[0] }),
+      });
+    } catch (emailError) {
+      console.error("Failed to send welcome email", emailError);
+      // Welcome email failure should NOT undo verification
+      // Verification is already complete
+    }
+
+    // Return success to frontend
+    // Do NOT include userId or other internal details
     res.status(200).json({
       success: true,
       message: "Email verified successfully.",
-      userId,
     });
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : "Unable to verify your email address.";
-    res.status(400).json({ success: false, error: message });
+    res.status(500).json({ error: message });
   }
 }

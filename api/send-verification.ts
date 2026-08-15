@@ -17,26 +17,6 @@ function getCocobaseConfig() {
   };
 }
 
-function getJsonBody(req: {
-  method?: string;
-  body?: unknown;
-  headers?: Record<string, string | string[] | undefined>;
-}) {
-  if (req.method === "GET") {
-    return {};
-  }
-
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
-  }
-
-  return req.body ?? {};
-}
-
 function getBearerToken(
   headers?: Record<string, string | string[] | undefined>,
 ) {
@@ -84,30 +64,6 @@ function getUserDisplayName(user: {
   return (nameFromData || user.name || user.email || "there").trim() || "there";
 }
 
-async function getUserByIdOrEmail(
-  client: Cocobase,
-  userId?: string,
-  email?: string,
-) {
-  if (!userId && !email) return null;
-
-  try {
-    const response = await client.auth.listUsers({ limit: 200 });
-    const users = Array.isArray(response?.data) ? response.data : [];
-
-    const match = users.find((user) => {
-      const userEmail = String(user.email || "").toLowerCase();
-      const sameId = user.id && userId && user.id === userId;
-      const sameEmail = email ? userEmail === email.toLowerCase() : false;
-      return sameId || sameEmail;
-    });
-
-    return match ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function handler(
   req: {
     method?: string;
@@ -123,19 +79,12 @@ export default async function handler(
     return;
   }
 
-  const body = getJsonBody(req) as {
-    userId?: string;
-    email?: string;
-    name?: string;
-    accessToken?: string;
-  };
+  // Extract authentication token from Authorization header
+  const accessToken = getBearerToken(req.headers);
 
-  const userId = body.userId?.trim();
-  const email = body.email?.trim().toLowerCase();
-  const accessToken = body.accessToken || getBearerToken(req.headers);
-
-  if (!userId || !email) {
-    res.status(400).json({ error: "Missing user identity or email." });
+  // Verify that the request is authenticated
+  if (!accessToken) {
+    res.status(401).json({ error: "Unauthorized. Authentication required." });
     return;
   }
 
@@ -152,26 +101,19 @@ export default async function handler(
       timeout: 60000,
     });
 
-    if (accessToken) {
-      const currentUser = await getCurrentUserFromToken(accessToken);
-      if (!currentUser || currentUser.id !== userId) {
-        throw new Error(
-          "The authenticated session does not match the requested user.",
-        );
-      }
+    // Get the authenticated user's identity from the token
+    // Do NOT trust browser-supplied userId or email
+    const currentUser = await getCurrentUserFromToken(accessToken);
+    if (!currentUser) {
+      res
+        .status(401)
+        .json({ error: "Invalid or expired authentication token." });
+      return;
     }
 
-    const user = await getUserByIdOrEmail(client, userId, email);
-    if (!user) {
-      throw new Error("User not found.");
-    }
-
-    const normalizedEmail = String(user.email || "")
-      .trim()
-      .toLowerCase();
-    if (normalizedEmail !== email) {
-      throw new Error("Email does not match the authenticated account.");
-    }
+    const userId = currentUser.id;
+    const email = String(currentUser.email || "").toLowerCase();
+    const name = getUserDisplayName(currentUser);
 
     const verificationDocs = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
@@ -195,17 +137,18 @@ export default async function handler(
 
     if (recentCount >= 3) {
       res.status(429).json({
-        success: false,
         error:
           "Too many verification emails sent. Please wait before requesting another one.",
       });
       return;
     }
 
+    // Generate cryptographically random token (32 bytes = 256 bits)
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
+    // Store the token hash and metadata server-side
     await client.createDocument("email_verifications", {
       userId,
       email,
@@ -215,12 +158,14 @@ export default async function handler(
       usedAt: null,
     });
 
+    // Send verification email with the raw token
     await sendVerificationEmail({
       to: email,
-      name: body.name || getUserDisplayName(user),
+      name,
       token,
     });
 
+    // Return success without exposing internal details
     res.status(200).json({
       success: true,
       message: "Verification email sent.",
@@ -230,6 +175,6 @@ export default async function handler(
       error instanceof Error
         ? error.message
         : "Unable to send verification email.";
-    res.status(400).json({ success: false, error: message });
+    res.status(400).json({ error: message });
   }
 }
