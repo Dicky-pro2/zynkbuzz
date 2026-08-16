@@ -71,7 +71,7 @@ const TX_META: Record<
 };
 
 export default function WalletPage() {
-  const { user, updateWallet } = useAuthStore();
+  const { user, updateWallet, accessToken } = useAuthStore();
   const { transactions, addTransaction } = useAppStore();
   const [selectedAmt, setSelectedAmt] = useState(500);
   const [customAmt, setCustomAmt] = useState("");
@@ -88,7 +88,7 @@ export default function WalletPage() {
     document.body.appendChild(script);
   }, []);
 
-  const handleFund = () => {
+  const handleFund = async () => {
     const amt = customAmt ? Number(customAmt) : selectedAmt;
     if (!amt || amt <= 0 || !user) {
       notify.error("Enter a valid amount");
@@ -97,6 +97,11 @@ export default function WalletPage() {
 
     if (!env.PAYSTACK_PUBLIC_KEY) {
       notify.error("Paystack is not configured yet.");
+      return;
+    }
+
+    if (!accessToken) {
+      notify.error("Your session is no longer active. Please sign in again.");
       return;
     }
 
@@ -110,51 +115,88 @@ export default function WalletPage() {
 
     setIsPaying(true);
 
-    const handler = paystack.setup({
-      key: env.PAYSTACK_PUBLIC_KEY,
-      email: user.email,
-      amount: Math.round(amt * 100),
-      currency: "NGN",
-      ref: `wallet-${user.id}-${Date.now()}`,
-      callback: async (response) => {
-        setIsPaying(false);
+    try {
+      const initializeResponse = await fetch("/api/payments/initialize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ amount: amt, email: user.email }),
+      });
 
-        try {
-          const verified = await cocobaseWallet.verifyDeposit(
-            response.reference,
-            amt,
-            user.id,
-            amt,
-            "Wallet top-up",
-          );
-          if (!verified?.verified) {
-            throw new Error("Payment could not be verified.");
+      const initPayload = (await initializeResponse
+        .json()
+        .catch(() => ({}))) as {
+        error?: string;
+        reference?: string;
+        publicKey?: string;
+        amount?: number;
+        email?: string;
+        authorizationUrl?: string;
+      };
+
+      if (!initializeResponse.ok || !initPayload.reference) {
+        throw new Error(initPayload.error || "Unable to start payment.");
+      }
+
+      const handler = paystack.setup({
+        key: initPayload.publicKey || env.PAYSTACK_PUBLIC_KEY,
+        email: initPayload.email || user.email,
+        amount: Math.round((initPayload.amount ?? amt) * 100),
+        currency: "NGN",
+        ref: initPayload.reference,
+        callback: async (response) => {
+          try {
+            const verified = await cocobaseWallet.verifyDeposit(
+              response.reference,
+              initPayload.amount ?? amt,
+              user.id,
+              initPayload.amount ?? amt,
+              "Wallet top-up",
+            );
+
+            if (!verified?.verified && verified?.walletBalance === undefined) {
+              throw new Error("Payment could not be verified.");
+            }
+
+            const nextBalance =
+              verified?.walletBalance ??
+              user.walletBalance + (initPayload.amount ?? amt);
+            updateWallet(nextBalance);
+            addTransaction({
+              type: "deposit",
+              amount: initPayload.amount ?? amt,
+              description: "Wallet top-up",
+            });
+            notify.walletFunded(initPayload.amount ?? amt);
+            notify.success(
+              `Payment confirmed. Reference: ${response.reference}`,
+            );
+            setCustomAmt("");
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Deposit verification failed.";
+            notify.error(message);
+          } finally {
+            setIsPaying(false);
           }
+        },
+        onClose: () => {
+          setIsPaying(false);
+          notify.error("Payment cancelled");
+        },
+      });
 
-          updateWallet(verified.walletBalance ?? user.walletBalance + amt);
-          addTransaction({
-            type: "deposit",
-            amount: amt,
-            description: "Wallet top-up",
-          });
-          notify.walletFunded(amt);
-          notify.success(`Payment confirmed. Reference: ${response.reference}`);
-          setCustomAmt("");
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Deposit verification failed.";
-          notify.error(message);
-        }
-      },
-      onClose: () => {
-        setIsPaying(false);
-        notify.error("Payment cancelled");
-      },
-    });
-
-    handler.openIframe();
+      handler.openIframe();
+    } catch (error) {
+      setIsPaying(false);
+      const message =
+        error instanceof Error ? error.message : "Unable to start payment.";
+      notify.error(message);
+    }
   };
 
   return (

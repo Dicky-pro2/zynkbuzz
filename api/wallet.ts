@@ -1,89 +1,38 @@
-const PAYSTACK_VERIFY_URL = "https://api.paystack.co/transaction/verify";
+import { Cocobase } from "cocobase";
+import {
+  DEFAULT_CURRENCY,
+  findPaymentDocumentByReference,
+  getBearerToken,
+  getCurrentUserFromToken,
+  getJsonBody,
+  getUserWalletBalance,
+  updatePaymentLedgerRecord,
+  updateUserWalletBalance,
+  validateDepositAmount,
+  verifyPaystackTransaction,
+} from "./_lib/payments";
 
-function getSecret() {
-  return process.env.PAYSTACK_SECRET_KEY || "";
-}
+async function getPaymentRecord(reference: string) {
+  const record = await findPaymentDocumentByReference(reference);
+  if (!record) return null;
 
-function getCocobaseConfig() {
-  return {
-    apiKey:
-      process.env.COCOBASE_API_KEY || process.env.VITE_COCOBASE_API_KEY || "",
-    projectId:
-      process.env.COCOBASE_PROJECT_ID ||
-      process.env.VITE_COCOBASE_PROJECT_ID ||
-      "",
-    baseURL:
-      process.env.COCOBASE_BASE_URL ||
-      process.env.VITE_COCOBASE_BASE_URL ||
-      "https://api.cocobase.cc",
+  const data = (record as { data?: Record<string, unknown> }).data ?? record;
+  return data as {
+    status?: string;
+    userId?: string;
+    reference?: string;
   };
-}
-
-async function verifyPaystackTransaction(
-  reference: string,
-  expectedAmount: number,
-) {
-  const secret = getSecret();
-  if (!secret) {
-    throw new Error("PAYSTACK_SECRET_KEY is not configured.");
-  }
-
-  const response = await fetch(
-    `${PAYSTACK_VERIFY_URL}/${encodeURIComponent(reference)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        "Content-Type": "application/json",
-      },
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error("Unable to verify payment with Paystack.");
-  }
-
-  const payload = (await response.json()) as {
-    status: boolean;
-    message?: string;
-    data?: {
-      status?: string;
-      amount?: number;
-      currency?: string;
-      reference?: string;
-      customer?: { email?: string };
-    };
-  };
-
-  if (!payload.status || payload.data?.status !== "success") {
-    throw new Error(payload.message || "Payment verification failed.");
-  }
-
-  if (!payload.data?.amount || payload.data.amount / 100 !== expectedAmount) {
-    throw new Error("Payment amount mismatch.");
-  }
-
-  return payload.data;
-}
-
-function getJsonBody(req: { method?: string; body?: unknown }) {
-  if (req.method === "GET") {
-    return {};
-  }
-
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
-  }
-
-  return req.body ?? {};
 }
 
 export default async function handler(
-  req: { method?: string; body?: unknown },
-  res: { status: (code: number) => { json: (payload: unknown) => void } },
+  req: {
+    method?: string;
+    body?: unknown;
+    headers?: Record<string, string | string[] | undefined>;
+  },
+  res: {
+    status: (code: number) => { json: (payload: unknown) => void };
+  },
 ) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -93,83 +42,132 @@ export default async function handler(
   const body = getJsonBody(req) as {
     reference?: string;
     amount?: number;
+    accessToken?: string;
     userId?: string;
     delta?: number;
-    description?: string;
-    type?: string;
-    accessToken?: string;
   };
 
-  if (!body.reference) {
-    res.status(400).json({ error: "Missing reference" });
+  const accessToken = body.accessToken || getBearerToken(req.headers);
+  if (!accessToken) {
+    res.status(401).json({ error: "Unauthorized. Authentication required." });
+    return;
+  }
+
+  const currentUser = await getCurrentUserFromToken(accessToken);
+  if (!currentUser) {
+    res.status(401).json({ error: "Invalid or expired authentication token." });
+    return;
+  }
+
+  const userId = String(currentUser.id || "");
+  const requestedReference = String(body.reference ?? "").trim();
+  if (!requestedReference) {
+    res.status(400).json({ error: "Missing payment reference." });
+    return;
+  }
+
+  if (body.userId && body.userId !== userId) {
+    res.status(403).json({ error: "User mismatch." });
     return;
   }
 
   try {
-    const verified = await verifyPaystackTransaction(
-      body.reference,
-      body.amount ?? 0,
-    );
+    const amountFromRequest =
+      body.amount !== undefined ? Number(body.amount) : undefined;
+    if (amountFromRequest !== undefined) {
+      validateDepositAmount(amountFromRequest);
+    }
 
-    if (body.userId && typeof body.delta === "number") {
-      if (!body.accessToken) {
-        throw new Error(
-          "Missing access token — cannot verify which user to credit.",
-        );
-      }
+    const verified = await verifyPaystackTransaction(requestedReference);
+    const verifiedAmount = Number((verified.amount ?? 0) / 100);
+    const currency = String(
+      verified.currency ?? DEFAULT_CURRENCY,
+    ).toUpperCase();
 
-      const { apiKey, projectId, baseURL } = getCocobaseConfig();
-      if (!apiKey || !projectId) {
-        throw new Error(
-          "Cocobase credentials are not configured on the server.",
-        );
-      }
+    if (currency !== DEFAULT_CURRENCY) {
+      throw new Error("Only NGN wallet funding is supported.");
+    }
 
-      const { Cocobase } = await import("cocobase");
-      const client = new Cocobase({
-        apiKey,
-        projectId,
-        baseURL,
-        timeout: 60000,
-      });
+    const existingRecord = await getPaymentRecord(requestedReference);
+    const existingStatus = String(existingRecord?.status ?? "").toLowerCase();
 
-      client.auth.setToken(body.accessToken);
-
-      const currentUser = await client.auth.getCurrentUser();
-
-      if (currentUser.id !== body.userId) {
-        throw new Error("Token does not match the requested user.");
-      }
-
-      const currentBalance = Number(currentUser?.data?.walletBalance ?? 0);
-      const nextBalance = Math.max(0, currentBalance + body.delta);
-      await client.auth.updateUser({
-        data: {
-          walletBalance: nextBalance,
-          updatedAt: new Date().toISOString(),
-        },
-      });
-
-      await client.createDocument("transactions", {
-        userId: body.userId,
-        type: body.type ?? "deposit",
-        amount: body.delta,
-        description: body.description ?? "Wallet update",
-        createdAt: new Date().toISOString(),
-      });
-
+    if (existingStatus === "success") {
+      const walletBalance = await getUserWalletBalance(userId);
       res.status(200).json({
-        verified,
-        reference: body.reference,
-        walletBalance: nextBalance,
+        success: true,
+        reference: requestedReference,
+        status: "success",
+        amount: verifiedAmount,
+        walletBalance,
+        alreadyProcessed: true,
       });
       return;
     }
 
-    res.status(200).json({ verified, reference: body.reference });
+    if (body.amount !== undefined && Number(body.amount) !== verifiedAmount) {
+      throw new Error("Payment amount mismatch.");
+    }
+
+    if (existingRecord && String(existingRecord.userId ?? "") !== userId) {
+      throw new Error(
+        "This transaction does not belong to the authenticated user.",
+      );
+    }
+
+    const client = new Cocobase({
+      apiKey: process.env.COCOBASE_API_KEY || "",
+      projectId: process.env.COCOBASE_PROJECT_ID || "",
+      baseURL:
+        process.env.COCOBASE_BASE_URL ||
+        process.env.VITE_COCOBASE_BASE_URL ||
+        "https://api.cocobase.cc",
+      timeout: 60000,
+    });
+
+    const existing = await findPaymentDocumentByReference(requestedReference);
+    if (!existing) {
+      await client.createDocument("transactions", {
+        userId,
+        reference: requestedReference,
+        amount: verifiedAmount,
+        currency,
+        type: "deposit",
+        status: "success",
+        provider: "paystack",
+        providerTransactionId: verified.id ? String(verified.id) : null,
+        email: verified.customer?.email ?? currentUser.email ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+    }
+
+    const currentBalance = await getUserWalletBalance(userId);
+    const nextBalance = currentBalance + verifiedAmount;
+    await updateUserWalletBalance(userId, nextBalance);
+    await updatePaymentLedgerRecord(requestedReference, {
+      userId,
+      reference: requestedReference,
+      amount: verifiedAmount,
+      currency,
+      status: "success",
+      provider: "paystack",
+      providerTransactionId: verified.id ? String(verified.id) : null,
+      completedAt: new Date().toISOString(),
+      walletBalance: nextBalance,
+    });
+
+    res.status(200).json({
+      success: true,
+      reference: requestedReference,
+      status: "success",
+      amount: verifiedAmount,
+      walletBalance: nextBalance,
+      alreadyProcessed: false,
+    });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Verification failed";
+      error instanceof Error ? error.message : "Unable to verify payment.";
     res.status(400).json({ error: message });
   }
 }
