@@ -1,21 +1,12 @@
-import crypto from "node:crypto";
 import { Cocobase } from "cocobase";
 import { sendVerificationEmail } from "./_lib/email";
-
-function getCocobaseConfig() {
-  return {
-    apiKey:
-      process.env.COCOBASE_API_KEY || process.env.VITE_COCOBASE_API_KEY || "",
-    projectId:
-      process.env.COCOBASE_PROJECT_ID ||
-      process.env.VITE_COCOBASE_PROJECT_ID ||
-      "",
-    baseURL:
-      process.env.COCOBASE_BASE_URL ||
-      process.env.VITE_COCOBASE_BASE_URL ||
-      "https://api.cocobase.cc",
-  };
-}
+import {
+  allowVerificationRequest,
+  generateVerificationToken,
+  getCocobaseConfig,
+  getVerificationExpiresAt,
+  hashVerificationToken,
+} from "./_lib/verification";
 
 function getBearerToken(
   headers?: Record<string, string | string[] | undefined>,
@@ -76,35 +67,6 @@ function isEmailVerified(
   );
 }
 
-const verificationRateLimits = new Map<
-  string,
-  { count: number; startedAt: number }
->();
-
-function allowVerificationRequest(key: string, maxPerHour = 3) {
-  const now = Date.now();
-  const existing = verificationRateLimits.get(key);
-
-  if (!existing) {
-    verificationRateLimits.set(key, { count: 1, startedAt: now });
-    return true;
-  }
-
-  const windowMs = 60 * 60 * 1000;
-  if (now - existing.startedAt > windowMs) {
-    verificationRateLimits.set(key, { count: 1, startedAt: now });
-    return true;
-  }
-
-  if (existing.count >= maxPerHour) {
-    return false;
-  }
-
-  existing.count += 1;
-  verificationRateLimits.set(key, existing);
-  return true;
-}
-
 export default async function handler(
   req: {
     method?: string;
@@ -120,10 +82,8 @@ export default async function handler(
     return;
   }
 
-  // Extract authentication token from Authorization header
   const accessToken = getBearerToken(req.headers);
 
-  // Verify that the request is authenticated
   if (!accessToken) {
     res.status(401).json({ error: "Unauthorized. Authentication required." });
     return;
@@ -142,8 +102,6 @@ export default async function handler(
       timeout: 60000,
     });
 
-    // Get the authenticated user's identity from the token
-    // Do NOT trust browser-supplied userId or email
     const currentUser = await getCurrentUserFromToken(accessToken);
     if (!currentUser) {
       res
@@ -175,8 +133,10 @@ export default async function handler(
 
     const verificationDocs = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
+        filters: { userId },
         sort: "created_at",
         order: "desc",
+        limit: 50,
       })
       .catch(() => []);
 
@@ -201,12 +161,10 @@ export default async function handler(
       return;
     }
 
-    // Generate cryptographically random token (32 bytes = 256 bits)
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const token = generateVerificationToken();
+    const tokenHash = hashVerificationToken(token);
+    const expiresAt = getVerificationExpiresAt();
 
-    // Store the token hash and metadata server-side
     await client.createDocument("email_verifications", {
       userId,
       email,
@@ -214,16 +172,15 @@ export default async function handler(
       expiresAt,
       createdAt: new Date().toISOString(),
       usedAt: null,
+      welcomeEmailSentAt: null,
     });
 
-    // Send verification email with the raw token
     await sendVerificationEmail({
       to: email,
       name,
       token,
     });
 
-    // Return success without exposing internal details
     res.status(200).json({
       success: true,
       message: "Verification email sent.",

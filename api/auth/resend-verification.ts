@@ -1,31 +1,21 @@
-import crypto from "node:crypto";
 import { Cocobase } from "cocobase";
 import { sendVerificationEmail } from "../_lib/email";
+import {
+  allowVerificationRequest,
+  findUserByEmail,
+  generateVerificationToken,
+  getCocobaseConfig,
+  getVerificationExpiresAt,
+  hashVerificationToken,
+  isValidEmail,
+  normalizeEmail,
+} from "../_lib/verification";
 
-function getCocobaseConfig() {
-  return {
-    apiKey:
-      process.env.COCOBASE_API_KEY || process.env.VITE_COCOBASE_API_KEY || "",
-    projectId:
-      process.env.COCOBASE_PROJECT_ID ||
-      process.env.VITE_COCOBASE_PROJECT_ID ||
-      "",
-    baseURL:
-      process.env.COCOBASE_BASE_URL ||
-      process.env.VITE_COCOBASE_BASE_URL ||
-      "https://api.cocobase.cc",
-  };
-}
-
-function sanitizeEmail(input: unknown) {
-  if (typeof input !== "string") return "";
-  return input.trim().toLowerCase();
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
+// NOTE: This in-memory limiter is intentionally temporary. Vercel serverless
+// instances are not guaranteed to share a single process, so it is not a
+// globally consistent distributed rate limit. This exists as an early guard,
+// while a deployment-level persistent limiter can be added later if the
+// underlying platform or datastore supports it safely.
 const resendRateLimit = new Map<string, { count: number; startedAt: number }>();
 
 function allowRequest(key: string, maxPerHour = 3) {
@@ -52,23 +42,6 @@ function allowRequest(key: string, maxPerHour = 3) {
   return true;
 }
 
-async function findUserByEmail(client: Cocobase, email: string) {
-  try {
-    const response = await client.auth.listUsers({ limit: 200 });
-    const users = Array.isArray(response?.data) ? response.data : [];
-    return (
-      users.find((user) => {
-        const appUserEmail = String((user as { email?: string }).email ?? "")
-          .trim()
-          .toLowerCase();
-        return appUserEmail === email;
-      }) ?? null
-    );
-  } catch {
-    return null;
-  }
-}
-
 export default async function handler(
   req: {
     method?: string;
@@ -84,7 +57,7 @@ export default async function handler(
     return;
   }
 
-  const email = sanitizeEmail(
+  const email = normalizeEmail(
     (req.body as { email?: unknown } | undefined)?.email ?? "",
   );
 
@@ -138,32 +111,44 @@ export default async function handler(
       return;
     }
 
-    const data = (user as { data?: Record<string, unknown> }).data ?? {};
-    const userId = String((user as { id?: string }).id ?? "");
-    const isVerified = Boolean(
-      data.isEmailVerified === true ||
-      data.is_email_verified === true ||
-      data.emailVerified === true ||
-      data.email_verified === true,
-    );
+    try {
+      const currentUser = await client.auth.getUserById(user.id);
+      const data =
+        (currentUser as { data?: Record<string, unknown> }).data ?? {};
+      const isVerified = Boolean(
+        data.isEmailVerified === true ||
+        data.is_email_verified === true ||
+        data.emailVerified === true ||
+        data.email_verified === true,
+      );
 
-    if (isVerified) {
-      res.status(200).json({
-        success: true,
-        message:
-          "If an account with that email requires verification, a new verification email has been sent.",
+      if (isVerified) {
+        res.status(200).json({
+          success: true,
+          message:
+            "If an account with that email requires verification, a new verification email has been sent.",
+        });
+        return;
+      }
+    } catch {
+      // Fall through and keep the generic response behavior for lookup failures.
+    }
+
+    const userRateLimitKey = `public:${user.id}:${email}`;
+    if (!allowVerificationRequest(userRateLimitKey, 3)) {
+      res.status(429).json({
+        success: false,
+        message: "Too many requests. Please wait a moment before trying again.",
       });
       return;
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
     const verificationDocs = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
+        filters: { userId: user.id },
         sort: "created_at",
         order: "desc",
+        limit: 50,
       })
       .catch(() => []);
 
@@ -174,7 +159,7 @@ export default async function handler(
         data.createdAt ?? (doc as { created_at?: string }).created_at ?? "",
       );
       return (
-        String(data.userId ?? "") === userId &&
+        String(data.userId ?? "") === user.id &&
         createdAt &&
         new Date(createdAt).getTime() >= oneHourAgo
       );
@@ -188,20 +173,23 @@ export default async function handler(
       return;
     }
 
+    const token = generateVerificationToken();
+    const tokenHash = hashVerificationToken(token);
+    const expiresAt = getVerificationExpiresAt();
+
     await client.createDocument("email_verifications", {
-      userId,
+      userId: user.id,
       email,
       tokenHash,
       expiresAt,
       createdAt: new Date().toISOString(),
       usedAt: null,
+      welcomeEmailSentAt: null,
     });
 
     await sendVerificationEmail({
       to: email,
-      name: String(
-        (user as { name?: string }).name || email.split("@")[0] || "there",
-      ),
+      name: user.name || email.split("@")[0] || "there",
       token,
     });
 

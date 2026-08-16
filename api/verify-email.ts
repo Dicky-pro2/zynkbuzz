@@ -1,21 +1,6 @@
-import crypto from "node:crypto";
 import { Cocobase } from "cocobase";
 import { sendWelcomeEmail } from "./_lib/email";
-
-function getCocobaseConfig() {
-  return {
-    apiKey:
-      process.env.COCOBASE_API_KEY || process.env.VITE_COCOBASE_API_KEY || "",
-    projectId:
-      process.env.COCOBASE_PROJECT_ID ||
-      process.env.VITE_COCOBASE_PROJECT_ID ||
-      "",
-    baseURL:
-      process.env.COCOBASE_BASE_URL ||
-      process.env.VITE_COCOBASE_BASE_URL ||
-      "https://api.cocobase.cc",
-  };
-}
+import { getCocobaseConfig, hashVerificationToken } from "./_lib/verification";
 
 function getJsonBody(req: {
   method?: string;
@@ -53,7 +38,6 @@ function getUserDisplayName(user: {
   return (nameFromData || user.name || user.email || "there").trim() || "there";
 }
 
-// Helper to update user's email verification status via Cocobase admin API
 async function markUserEmailVerified(
   userId: string,
   baseURL: string,
@@ -119,12 +103,13 @@ export default async function handler(
       timeout: 60000,
     });
 
-    // Hash the provided token and search for it
-    const hash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const hash = hashVerificationToken(rawToken);
     const records = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
+        filters: { tokenHash: hash },
         sort: "created_at",
         order: "desc",
+        limit: 20,
       })
       .catch(() => []);
 
@@ -145,8 +130,10 @@ export default async function handler(
     const email = String(data.email ?? "").toLowerCase();
     const expiresAt = String(data.expiresAt ?? "");
     const usedAt = data.usedAt ? String(data.usedAt) : "";
+    const welcomeEmailSentAt = data.welcomeEmailSentAt
+      ? String(data.welcomeEmailSentAt)
+      : "";
 
-    // Check if token has already been used
     if (usedAt) {
       res.status(409).json({
         error: "This verification link has already been used.",
@@ -154,7 +141,6 @@ export default async function handler(
       return;
     }
 
-    // Check if token has expired
     if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
       res.status(400).json({
         error: "This verification link has expired. Please request a new one.",
@@ -162,27 +148,42 @@ export default async function handler(
       return;
     }
 
-    // Update the user's verification status before consuming the token so that
-    // a user is never left in a verified-but-locked state if the token write fails.
-    await markUserEmailVerified(userId, baseURL, apiKey);
-
-    await client
-      .updateDocument("email_verifications", String(record.id), {
-        usedAt: new Date().toISOString(),
-      })
-      .catch(() => undefined);
-
+    const now = new Date().toISOString();
     try {
-      await sendWelcomeEmail({
-        to: email,
-        name: getUserDisplayName({ email, name: email.split("@")[0] }),
+      await client.updateDocument("email_verifications", String(record.id), {
+        usedAt: now,
+        consumedAt: now,
+        updatedAt: now,
       });
-    } catch (emailError) {
-      console.error("Failed to send welcome email", emailError);
+    } catch {
+      throw new Error(
+        "Unable to finalize verification token. Please request a new verification email.",
+      );
     }
 
-    // Return success to frontend
-    // Do NOT include userId or other internal details
+    try {
+      await markUserEmailVerified(userId, baseURL, apiKey);
+    } catch {
+      throw new Error(
+        "Verification could not be completed. Please request a new verification email.",
+      );
+    }
+
+    if (!welcomeEmailSentAt) {
+      try {
+        await sendWelcomeEmail({
+          to: email,
+          name: getUserDisplayName({ email, name: email.split("@")[0] }),
+        });
+        await client.updateDocument("email_verifications", String(record.id), {
+          welcomeEmailSentAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (emailError) {
+        console.error("Failed to send welcome email", emailError);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: "Email verified successfully.",

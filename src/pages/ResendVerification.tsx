@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Icons } from "../components/icons/Icons";
@@ -7,17 +7,54 @@ import { notify } from "../utils/notify";
 import { cocobaseAuth } from "../services/cocobase";
 import { AuthShell, LoadingSpinner } from "./Login";
 
+const RESEND_COOLDOWN_MS = 45_000;
+
 export default function ResendVerification() {
   const { user } = useAuthStore();
   const [email, setEmail] = useState(user?.email ?? "");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
+
+  useEffect(() => {
+    if (!cooldownUntil) return;
+
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+      if (currentTime >= cooldownUntil) {
+        setCooldownUntil(null);
+        window.clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
+
+  const cooldownActive = Boolean(
+    cooldownUntil && now !== null && now < cooldownUntil,
+  );
+  const remainingSeconds =
+    cooldownUntil && now !== null
+      ? Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
+      : 0;
+
+  const activeEmail = user?.email ?? email;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail) {
+
+    if (!user && !email.trim()) {
       notify.error("Please enter your email");
+      return;
+    }
+
+    if (cooldownActive) {
       return;
     }
 
@@ -29,7 +66,7 @@ export default function ResendVerification() {
         const response = await fetch("/api/auth/resend-verification", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: normalizedEmail }),
+          body: JSON.stringify({ email: email.trim() }),
         });
 
         const payload = (await response.json().catch(() => ({}))) as {
@@ -44,8 +81,10 @@ export default function ResendVerification() {
         }
       }
 
+      setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS);
+      setNow(Date.now());
       setSent(true);
-      notify.success("Verification link sent to your inbox.");
+      notify.success("Verification email sent! Check your inbox.");
     } catch (error) {
       notify.error(
         error instanceof Error
@@ -79,15 +118,22 @@ export default function ResendVerification() {
           <h2 className="font-sora font-bold text-xl">Check your inbox</h2>
           <p className="text-slatec text-sm leading-relaxed">
             We sent a new verification link to{" "}
-            <strong className="text-white">{email}</strong>.
+            <strong className="text-white">{activeEmail}</strong>.
           </p>
+          {remainingSeconds > 0 && (
+            <p className="text-xs text-amber-300">
+              Resend available in {remainingSeconds} seconds.
+            </p>
+          )}
           <div className="pt-2">
             <p className="text-xs text-slatec mb-3">Didn't receive it?</p>
             <button
               onClick={() => setSent(false)}
-              className="btn-secondary w-full text-sm flex items-center justify-center gap-2"
+              disabled={cooldownActive}
+              className="btn-secondary w-full text-sm flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              <Icons.Refresh size={14} /> Try Again
+              <Icons.Refresh size={14} />
+              {remainingSeconds > 0 ? `Wait ${remainingSeconds}s` : "Try Again"}
             </button>
           </div>
         </motion.div>
@@ -101,7 +147,7 @@ export default function ResendVerification() {
           </h1>
           <p className="text-slatec text-sm mb-6 leading-relaxed">
             {user
-              ? "Send a fresh verification email to your authenticated account."
+              ? "We'll send the verification email to your account email."
               : "Enter the email address you used to create your ZynkBuzz account."}
           </p>
 
@@ -117,20 +163,28 @@ export default function ResendVerification() {
                   type="email"
                   className="input pl-10"
                   placeholder="you@example.com"
-                  value={email}
+                  value={activeEmail}
                   onChange={(e) => setEmail(e.target.value)}
+                  readOnly={Boolean(user)}
+                  disabled={Boolean(user)}
+                  aria-readonly={Boolean(user)}
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="btn-primary w-full font-sora flex items-center justify-center gap-2"
+              disabled={loading || cooldownActive}
+              className="btn-primary w-full font-sora flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loading ? (
                 <>
                   <LoadingSpinner /> Sending...
+                </>
+              ) : remainingSeconds > 0 ? (
+                <>
+                  <Icons.Clock size={16} /> Resend available in{" "}
+                  {remainingSeconds}s
                 </>
               ) : (
                 <>
