@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import Toaster from "./components/Toaster";
 //import ErrorBoundary from './components/ErrorBoundary';
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
@@ -50,6 +51,12 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  useEffect(() => {
+    void import("./services/cocobase").then(({ restoreCocobaseSession }) => {
+      void restoreCocobaseSession();
+    });
+  }, []);
 
   return (
     <ThemeProvider>

@@ -15,14 +15,35 @@ export default function ResendVerification() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
       notify.error("Please enter your email");
       return;
     }
 
     setLoading(true);
     try {
-      await cocobaseAuth.requestEmailVerification();
+      if (user) {
+        await cocobaseAuth.requestEmailVerification();
+      } else {
+        const response = await fetch("/api/auth/resend-verification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normalizedEmail }),
+        });
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(
+            payload.error || "Unable to send verification email.",
+          );
+        }
+      }
+
       setSent(true);
       notify.success("Verification link sent to your inbox.");
     } catch (error) {
@@ -79,7 +100,9 @@ export default function ResendVerification() {
             Resend Verification
           </h1>
           <p className="text-slatec text-sm mb-6 leading-relaxed">
-            Enter your email address and we'll send you a new verification link.
+            {user
+              ? "Send a fresh verification email to your authenticated account."
+              : "Enter the email address you used to create your ZynkBuzz account."}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

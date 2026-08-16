@@ -59,33 +59,24 @@ async function markUserEmailVerified(
   baseURL: string,
   apiKey: string,
 ): Promise<void> {
-  try {
-    // Attempt to update user via Cocobase REST API using admin API key
-    const url = `${baseURL}/auth/users/${encodeURIComponent(userId)}`;
-    const response = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
+  const url = `${baseURL}/auth/users/${encodeURIComponent(userId)}`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      data: {
+        isEmailVerified: true,
+        emailVerified: true,
+        updatedAt: new Date().toISOString(),
       },
-      body: JSON.stringify({
-        data: {
-          isEmailVerified: true,
-          updatedAt: new Date().toISOString(),
-        },
-      }),
-    });
+    }),
+  });
 
-    if (!response.ok) {
-      // Log but don't fail - the token is already marked as used
-      console.error(
-        "Failed to update user email verification status:",
-        response.status,
-      );
-    }
-  } catch (error) {
-    // Log but don't fail - the token is already marked as used
-    console.error("Error updating email verification status:", error);
+  if (!response.ok) {
+    throw new Error("Failed to update user email verification status.");
   }
 }
 
@@ -171,20 +162,16 @@ export default async function handler(
       return;
     }
 
-    // Mark token as used immediately to prevent race conditions
-    // This is the critical step to make verification idempotent
+    // Update the user's verification status before consuming the token so that
+    // a user is never left in a verified-but-locked state if the token write fails.
+    await markUserEmailVerified(userId, baseURL, apiKey);
+
     await client
       .updateDocument("email_verifications", String(record.id), {
         usedAt: new Date().toISOString(),
       })
       .catch(() => undefined);
 
-    // Now that token is marked as used, proceed with verification
-    // Update the user's isEmailVerified status via the Cocobase admin API
-    await markUserEmailVerified(userId, baseURL, apiKey);
-
-    // Send welcome email (only if we haven't already)
-    // This should only happen once since we check usedAt above
     try {
       await sendWelcomeEmail({
         to: email,
@@ -192,8 +179,6 @@ export default async function handler(
       });
     } catch (emailError) {
       console.error("Failed to send welcome email", emailError);
-      // Welcome email failure should NOT undo verification
-      // Verification is already complete
     }
 
     // Return success to frontend

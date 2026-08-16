@@ -3,17 +3,34 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icons } from "../icons/Icons";
 import { notify } from "../../utils/notify";
+import { useAuthStore } from "../../store/authStore";
+import { cocobaseAuth } from "../../services/cocobase";
 
 export default function VerificationBanner() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [dismissed, setDismissed] = useState(false);
   const [sending, setSending] = useState(false);
 
   const handleResend = async () => {
+    if (!user) {
+      navigate("/resend-verification");
+      return;
+    }
+
     setSending(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSending(false);
-    notify.success("Verification email sent! Check your inbox.");
+    try {
+      await cocobaseAuth.requestEmailVerification();
+      notify.success("Verification email sent! Check your inbox.");
+    } catch (error) {
+      notify.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to send verification email.",
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -56,9 +73,7 @@ export default function VerificationBanner() {
                 )}
               </button>
               <button
-                onClick={() =>
-                  navigate("/verify-email?token=demo_verification_token")
-                }
+                onClick={() => navigate("/resend-verification")}
                 className="text-xs font-semibold text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg px-2.5 py-1.5 transition-all flex items-center gap-1"
               >
                 <Icons.Verified size={11} /> Verify Now

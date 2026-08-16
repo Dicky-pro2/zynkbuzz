@@ -270,6 +270,34 @@ async function requestCocobase(
   }
 }
 
+export async function restoreCocobaseSession() {
+  if (!cocobaseClient) {
+    return null;
+  }
+
+  try {
+    const result = await cocobaseClient.auth.initAuth();
+    const token = cocobaseClient.auth.getToken() ?? result.token;
+    const user = normalizeUser(result.user ?? null, "earner");
+
+    if (user && token) {
+      useAuthStore.getState().restoreSession(user, token, token);
+      return { user, token, isAuthenticated: true };
+    }
+
+    if (token) {
+      useAuthStore.getState().setTokens(token, token);
+      return { user: null, token, isAuthenticated: true };
+    }
+
+    useAuthStore.getState().logout();
+    return { user: null, token: null, isAuthenticated: false };
+  } catch {
+    useAuthStore.getState().logout();
+    return null;
+  }
+}
+
 export const cocobaseAuth = {
   async googleLogin(idToken: string, fallbackRole: Role = "earner") {
     if (!cocobaseClient) {
@@ -279,10 +307,11 @@ export const cocobaseAuth = {
       const appUser = await cocobaseClient.auth.loginWithGoogle({ idToken });
       const user = normalizeUser(appUser, fallbackRole);
       if (!user) throw new Error("Unable to sign in. Please try again.");
+      const token = cocobaseClient.auth.getToken() ?? "";
       return {
         user,
-        token: cocobaseClient.auth.getToken() ?? "cocobase_token",
-        refreshToken: "cocobase_refresh",
+        token,
+        refreshToken: token || "cocobase_refresh",
       };
     } catch (error) {
       const message =
@@ -311,10 +340,11 @@ export const cocobaseAuth = {
         throw new Error("Incorrect email or password.");
       }
 
+      const token = cocobaseClient.auth.getToken() ?? "";
       return {
         user,
-        token: cocobaseClient.auth.getToken() ?? "cocobase_token",
-        refreshToken: "cocobase_refresh",
+        token,
+        refreshToken: token || "cocobase_refresh",
       };
     } catch (error) {
       throw normalizeAuthError(error);
@@ -359,10 +389,11 @@ export const cocobaseAuth = {
         if (!user)
           throw new Error("Unable to create account. Please try again.");
 
+        const token = cocobaseClient.auth.getToken() ?? "";
         return {
           user,
-          token: cocobaseClient.auth.getToken() ?? "cocobase_token",
-          refreshToken: "cocobase_refresh",
+          token,
+          refreshToken: token || "cocobase_refresh",
         };
       } catch (error) {
         const message =
@@ -389,7 +420,8 @@ export const cocobaseAuth = {
     const user = useAuthStore.getState().user;
     if (!user) throw new Error("You must be signed in to verify your email.");
 
-    const token = cocobaseClient?.auth.getToken();
+    const token =
+      cocobaseClient?.auth.getToken() ?? useAuthStore.getState().accessToken;
     if (!token) {
       throw new Error("Authentication token is not available.");
     }

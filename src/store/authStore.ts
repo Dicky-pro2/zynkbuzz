@@ -10,6 +10,11 @@ interface AuthState {
   isAuthenticated: boolean;
   login: (user: User, accessToken: string, refreshToken: string) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
+  restoreSession: (
+    user: User,
+    accessToken: string,
+    refreshToken?: string,
+  ) => void;
   updateWallet: (newBalance: number) => void;
   updateName: (name: string) => void;
   updateAvatar: (avatar: string | null) => void;
@@ -56,6 +61,14 @@ export const useAuthStore = create<AuthState>()(
 
       setTokens: (accessToken, refreshToken) =>
         set({
+          accessToken: accessToken || null,
+          refreshToken: refreshToken || null,
+          isAuthenticated: !!(accessToken || refreshToken),
+        }),
+
+      restoreSession: (user, accessToken, refreshToken) =>
+        set({
+          user,
           accessToken: accessToken || null,
           refreshToken: refreshToken || null,
           isAuthenticated: true,
@@ -136,6 +149,8 @@ export const useAuthStore = create<AuthState>()(
       name: "zynk-auth",
       partialize: (state) => ({
         user: state.user,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {

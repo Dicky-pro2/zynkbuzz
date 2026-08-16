@@ -64,6 +64,47 @@ function getUserDisplayName(user: {
   return (nameFromData || user.name || user.email || "there").trim() || "there";
 }
 
+function isEmailVerified(
+  user: { data?: Record<string, unknown> } | null | undefined,
+) {
+  const data = user?.data ?? {};
+  return Boolean(
+    data.isEmailVerified === true ||
+    data.is_email_verified === true ||
+    data.emailVerified === true ||
+    data.email_verified === true,
+  );
+}
+
+const verificationRateLimits = new Map<
+  string,
+  { count: number; startedAt: number }
+>();
+
+function allowVerificationRequest(key: string, maxPerHour = 3) {
+  const now = Date.now();
+  const existing = verificationRateLimits.get(key);
+
+  if (!existing) {
+    verificationRateLimits.set(key, { count: 1, startedAt: now });
+    return true;
+  }
+
+  const windowMs = 60 * 60 * 1000;
+  if (now - existing.startedAt > windowMs) {
+    verificationRateLimits.set(key, { count: 1, startedAt: now });
+    return true;
+  }
+
+  if (existing.count >= maxPerHour) {
+    return false;
+  }
+
+  existing.count += 1;
+  verificationRateLimits.set(key, existing);
+  return true;
+}
+
 export default async function handler(
   req: {
     method?: string;
@@ -114,6 +155,23 @@ export default async function handler(
     const userId = currentUser.id;
     const email = String(currentUser.email || "").toLowerCase();
     const name = getUserDisplayName(currentUser);
+
+    if (isEmailVerified(currentUser)) {
+      res.status(200).json({
+        success: true,
+        message: "This email is already verified.",
+      });
+      return;
+    }
+
+    const rateLimitKey = `${userId}:${email}`;
+    if (!allowVerificationRequest(rateLimitKey)) {
+      res.status(429).json({
+        error:
+          "Too many verification emails sent. Please wait before requesting another one.",
+      });
+      return;
+    }
 
     const verificationDocs = await client
       .listDocuments<Record<string, unknown>>("email_verifications", {
